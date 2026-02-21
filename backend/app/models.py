@@ -24,8 +24,8 @@ class Opening(BaseModel):
 
 class Roof(BaseModel):
     type: RoofType
-    height_blocks: int = Field(..., ge=2, le=40)
-    overhang: int = Field(..., ge=0, le=4)
+    height_blocks: int = Field(..., ge=2, le=8)
+    overhang: int = Field(..., ge=0, le=2)
 
 
 class Materials(BaseModel):
@@ -45,9 +45,9 @@ class Style(BaseModel):
 
 
 class Building(BaseModel):
-    width_blocks: int = Field(..., ge=10, le=80)
-    wall_height_blocks: int = Field(..., ge=6, le=60)
-    depth_blocks: int = Field(..., ge=6, le=60)
+    width_blocks: int = Field(..., ge=8, le=20)
+    wall_height_blocks: int = Field(..., ge=4, le=10)
+    depth_blocks: int = Field(..., ge=6, le=14)
     roof: Roof
     openings: List[Opening] = Field(default_factory=list)
 

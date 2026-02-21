@@ -133,9 +133,11 @@ class BlockPlanner:
                 ))
     
     def _carve_opening(self, ox: int, oy: int, oz: int, opening):
-        """Carve out an opening (replace with air)."""
-        for dx in range(opening.w):
-            for dy in range(opening.h):
+        """Carve out an opening (replace with air). Doors are always 1 block wide and 2 blocks tall in the build."""
+        w = 1 if opening.type == "door" else opening.w
+        h = 2 if opening.type == "door" else opening.h
+        for dx in range(w):
+            for dy in range(h):
                 self.placements.append(BlockPlacement(
                     x=ox + opening.x + dx,
                     y=oy + 1 + opening.y + dy,
