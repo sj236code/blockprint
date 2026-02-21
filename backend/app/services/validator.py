@@ -23,12 +23,17 @@ def validate_blueprint(raw: dict) -> Tuple[Blueprint, List[str]]:
 
 
 def _normalize_blueprint_dict(d: dict) -> dict:
-    """Ensure dict structure matches Blueprint schema (e.g. building, style, view)."""
+    """Ensure dict structure matches Blueprint schema (building, segments, style, view)."""
     out = {"view": d.get("view", "front")}
-    if "building" in d:
-        out["building"] = d["building"]
+    if "segments" in d and isinstance(d["segments"], list) and len(d["segments"]) > 0:
+        out["segments"] = [_normalize_building_dict(s) for s in d["segments"]]
+        out["building"] = None
+    elif "building" in d:
+        out["building"] = _normalize_building_dict(d["building"])
+        out["segments"] = None
     else:
         out["building"] = {}
+        out["segments"] = None
     if "style" in d:
         out["style"] = d["style"]
     else:
@@ -36,17 +41,55 @@ def _normalize_blueprint_dict(d: dict) -> dict:
     return out
 
 
+def _normalize_building_dict(b: dict) -> dict:
+    """Normalize a single building/segment dict (openings, door 1x2, etc.)."""
+    if not isinstance(b, dict):
+        return b
+    out = dict(b)
+    if "openings" not in out:
+        out["openings"] = []
+    for op in out["openings"]:
+        if not isinstance(op, dict):
+            continue
+        if "w" not in op or op.get("w") is None:
+            op["w"] = 1
+        if "h" not in op or op.get("h") is None:
+            op["h"] = 2 if op.get("type") == "door" else 3
+        if op.get("type") == "door":
+            op["w"] = 1
+            op["h"] = 2
+    return out
+
+
 def _apply_safe_defaults(data: dict) -> dict:
     """Fill missing required fields with schema defaults so validation can succeed."""
-    b = data.get("building") or {}
+    if "segments" in data and isinstance(data["segments"], list):
+        for i, seg in enumerate(data["segments"]):
+            if isinstance(seg, dict):
+                data["segments"][i] = _apply_building_defaults(seg)
+        if "building" not in data or data["building"] is None:
+            data["building"] = data["segments"][0] if data["segments"] else {}
+    else:
+        b = data.get("building") or {}
+        data["building"] = _apply_building_defaults(b)
+        if "segments" not in data:
+            data["segments"] = None
+    if "style" not in data:
+        data["style"] = {}
+    return data
+
+
+def _apply_building_defaults(b: dict) -> dict:
+    """Fill defaults for a single building/segment."""
+    if not isinstance(b, dict):
+        return b
     if "width_blocks" not in b:
         b["width_blocks"] = 24
     if "wall_height_blocks" not in b:
         b["wall_height_blocks"] = 12
     if "depth_blocks" not in b:
         b["depth_blocks"] = 10
-    if "roof" not in b:
-        b["roof"] = {"type": "gable", "height_blocks": 7, "overhang": 1}
+    # Do not default roof when missing: segment has no roof (e.g. flat connector)
     if "openings" not in b:
         b["openings"] = []
     for op in b["openings"]:
@@ -55,11 +98,11 @@ def _apply_safe_defaults(data: dict) -> dict:
         if "w" not in op or op.get("w") is None:
             op["w"] = 1
         if "h" not in op or op.get("h") is None:
-            op["h"] = 4 if op.get("type") == "door" else 3
-    data["building"] = b
-    if "style" not in data:
-        data["style"] = {}
-    return data
+            op["h"] = 2 if op.get("type") == "door" else 3
+        if op.get("type") == "door":
+            op["w"] = 1
+            op["h"] = 2
+    return b
 
 
 class BlueprintValidator:

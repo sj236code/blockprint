@@ -1,1 +1,64 @@
-{"view": "front", "building": {"width_blocks": 24, "wall_height_blocks": 12, "depth_blocks": 10, "roof": {"type": "gable", "height_blocks": 7, "overhang": 1}, "openings": [{"type": "window", "x": 4, "y": 5, "w": 5, "h": 5}, {"type": "door", "x": 14, "y": 0, "w": 3, "h": 6}]}, "style": {"theme": "ghibli", "materials": {"foundation": "mossy_cobblestone", "wall": "oak_planks", "trim": "stripped_oak_log", "roof": "spruce_stairs", "window": "glass_pane", "door": "oak_door"}, "decor": ["lantern", "leaves"], "variation": 0.15}}
+{
+  "view": "front",
+  "segments": [
+    {
+      "width_blocks": 12,
+      "wall_height_blocks": 8,
+      "depth_blocks": 8,
+      "roof": {
+        "type": "gable",
+        "height_blocks": 5,
+        "overhang": 1
+      },
+      "openings": [
+        {
+          "type": "window",
+          "x": 3,
+          "y": 5,
+          "w": 2,
+          "h": 2
+        },
+        {
+          "type": "door",
+          "x": 5,
+          "y": 0,
+          "w": 1,
+          "h": 2
+        }
+      ]
+    },
+    {
+      "width_blocks": 6,
+      "wall_height_blocks": 4,
+      "depth_blocks": 8,
+      "openings": []
+    },
+    {
+      "width_blocks": 8,
+      "wall_height_blocks": 7,
+      "depth_blocks": 8,
+      "roof": {
+        "type": "gable",
+        "height_blocks": 6,
+        "overhang": 1
+      },
+      "openings": []
+    }
+  ],
+  "style": {
+    "theme": "ghibli",
+    "materials": {
+      "foundation": "mossy_cobblestone",
+      "wall": "oak_planks",
+      "trim": "stripped_oak_log",
+      "roof": "spruce_stairs",
+      "window": "glass_pane",
+      "door": "oak_door"
+    },
+    "decor": [
+      "lantern",
+      "leaves"
+    ],
+    "variation": 0.15
+  }
+}

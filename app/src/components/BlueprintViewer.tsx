@@ -13,6 +13,7 @@ import {
   Box
 } from 'lucide-react';
 import type { Blueprint } from '@/types';
+import { getBlueprintSegments } from '@/types';
 
 interface BlueprintViewerProps {
   blueprint: Blueprint;
@@ -23,8 +24,18 @@ export function BlueprintViewer({ blueprint, className }: BlueprintViewerProps) 
   const [activeTab, setActiveTab] = useState<'visual' | 'json'>('visual');
   const [copied, setCopied] = useState(false);
 
-  const { building, style } = blueprint;
-  const { width_blocks, wall_height_blocks, depth_blocks, roof, openings } = building;
+  const { style } = blueprint;
+  const segments = getBlueprintSegments(blueprint);
+  const isMultiSegment = segments.length > 1;
+  const firstSegment = segments[0];
+  const totalWidth = segments.reduce((s, seg) => s + seg.width_blocks, 0);
+  const { width_blocks, wall_height_blocks, depth_blocks, roof, openings } = firstSegment ?? {
+    width_blocks: 0,
+    wall_height_blocks: 0,
+    depth_blocks: 0,
+    roof: undefined,
+    openings: [],
+  };
 
   const jsonString = JSON.stringify(blueprint, null, 2);
 
@@ -88,8 +99,12 @@ export function BlueprintViewer({ blueprint, className }: BlueprintViewerProps) 
               </div>
               
               <div className="absolute top-4 right-4 px-3 py-1.5 bg-black/80 border-2 border-[#5a6b4a] font-minecraft">
-                <span className="text-xs text-[#7CBD6B] uppercase tracking-wider">Roof</span>
-                <p className="text-sm font-medium text-white capitalize">{roof.type}</p>
+                <span className="text-xs text-[#7CBD6B] uppercase tracking-wider">
+                  {isMultiSegment ? 'Segments' : 'Roof'}
+                </span>
+                <p className="text-sm font-medium text-white capitalize">
+                  {isMultiSegment ? `${segments.length}` : roof ? roof.type : 'None'}
+                </p>
               </div>
             </div>
 
@@ -97,8 +112,8 @@ export function BlueprintViewer({ blueprint, className }: BlueprintViewerProps) 
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
               <StatsCard
                 icon={<Ruler className="w-5 h-5 text-[#7CBD6B]" />}
-                label="Width"
-                value={width_blocks}
+                label={isMultiSegment ? 'Total Width' : 'Width'}
+                value={isMultiSegment ? totalWidth : width_blocks}
                 unit="blocks"
                 delay={0}
               />
@@ -118,9 +133,9 @@ export function BlueprintViewer({ blueprint, className }: BlueprintViewerProps) 
               />
               <StatsCard
                 icon={<Mountain className="w-5 h-5 text-[#7CBD6B]" />}
-                label="Roof Height"
-                value={roof.height_blocks}
-                unit="blocks"
+                label={isMultiSegment ? 'Segments' : roof ? 'Roof Height' : 'Roof'}
+                value={isMultiSegment ? segments.length : roof ? roof.height_blocks : 'None'}
+                unit={isMultiSegment ? '' : roof ? 'blocks' : ''}
                 delay={300}
               />
             </div>
@@ -141,26 +156,32 @@ export function BlueprintViewer({ blueprint, className }: BlueprintViewerProps) 
               </div>
             </div>
 
-            {/* Openings */}
-            {openings.length > 0 && (
+            {/* Openings (all segments) */}
+            {segments.some(seg => seg.openings.length > 0) && (
               <div className="p-4 border-2 border-[#4a5b3a] bg-[#0d1a0a]/80">
                 <h4 className="text-sm font-medium font-minecraft text-[#7CBD6B] mb-3">
-                  Openings ({openings.length})
+                  Openings
+                  {isMultiSegment
+                    ? ` (${segments.reduce((s, seg) => s + seg.openings.length, 0)} total)`
+                    : ` (${openings.length})`}
                 </h4>
                 <div className="space-y-2">
-                  {openings.map((opening, index) => (
-                    <div
-                      key={index}
-                      className="flex items-center justify-between px-3 py-2 border-2 border-[#4a5b3a] bg-[#1a2d12]/60 font-minecraft"
-                    >
-                      <span className="text-sm text-white/70 capitalize">
-                        {opening.type} #{index + 1}
-                      </span>
-                      <span className="text-xs text-white/50">
-                        {opening.w}×{opening.h} at ({opening.x}, {opening.y})
-                      </span>
-                    </div>
-                  ))}
+                  {segments.map((seg, segIndex) =>
+                    seg.openings.map((opening, index) => (
+                      <div
+                        key={`${segIndex}-${index}`}
+                        className="flex items-center justify-between px-3 py-2 border-2 border-[#4a5b3a] bg-[#1a2d12]/60 font-minecraft"
+                      >
+                        <span className="text-sm text-white/70 capitalize">
+                          {isMultiSegment ? `Seg ${segIndex + 1}: ` : ''}
+                          {opening.type} #{index + 1}
+                        </span>
+                        <span className="text-xs text-white/50">
+                          {opening.w}×{opening.h} at ({opening.x}, {opening.y})
+                        </span>
+                      </div>
+                    ))
+                  )}
                 </div>
               </div>
             )}
