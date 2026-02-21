@@ -171,20 +171,37 @@ class BlockPlanner:
                 ))
     
     def _add_gable_roof(self, ox: int, oy: int, oz: int, W: int, H: int, D: int, R: int, overhang: int, material: str):
-        """Add a gable roof."""
+        """Add a gable roof with correctly oriented stair blocks."""
         for i in range(R):
             y = oy + H + 1 + i
+            # Each layer steps inward by i blocks on the X axis (gable ridge runs Z axis)
             x1 = ox - overhang + i
-            x2 = ox + W + overhang - 1 - i
-            
-            for x in range(x1, x2 + 1):
-                for z in range(oz - overhang, oz + D + overhang):
-                    self.placements.append(BlockPlacement(
-                        x=x,
-                        y=y,
-                        z=z,
-                        block_type=material
-                    ))
+            x2 = ox + W - 1 + overhang - i
+            z1 = oz - overhang
+            z2 = oz + D - 1 + overhang
+
+            for z in range(z1, z2 + 1):
+                for x in range(x1, x2 + 1):
+                    # Determine if this block is on the perimeter of this layer
+                    on_west  = (x == x1)
+                    on_east  = (x == x2)
+                    on_north = (z == z1)
+                    on_south = (z == z2)
+
+                    if on_west:
+                        # Bottom step faces west (away from building center)
+                        block = f"{material}[facing=east,half=bottom,shape=straight]"
+                    elif on_east:
+                        block = f"{material}[facing=west,half=bottom,shape=straight]"
+                    elif on_north:
+                        block = f"{material}[facing=north,half=bottom,shape=straight]"
+                    elif on_south:
+                        block = f"{material}[facing=south,half=bottom,shape=straight]"
+                    else:
+                        # Interior fill — use a solid block so there are no gaps
+                        block = "spruce_planks"
+
+                    self.placements.append(BlockPlacement(x=x, y=y, z=z, block_type=block))
     
     def _add_decorations(self, ox: int, oy: int, oz: int, W: int, H: int, D: int, decor: List[str]):
         """Add decorative elements."""
