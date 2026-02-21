@@ -20,53 +20,50 @@ class BlockPlanner:
         self.placements: List[BlockPlacement] = []
     
     def generate_placements(self, blueprint: Blueprint) -> List[BlockPlacement]:
-        """Generate all block placements from blueprint."""
+        """Generate all block placements from blueprint (single or multi-segment)."""
         self.placements = []
-        
-        building = blueprint.building
         style = blueprint.style
         materials = style.materials
-        
-        # Get origin
+        segments = blueprint.get_segments()
+
         ox = self.settings.build_origin_x
         oy = self.settings.build_origin_y
         oz = self.settings.build_origin_z
-        
-        W = building.width_blocks
-        H = building.wall_height_blocks
-        D = building.depth_blocks
-        R = building.roof.height_blocks
-        overhang = building.roof.overhang
-        
-        # 1. Clear area
-        self._add_clear_command(ox, oy, oz, W, H, R, D, overhang)
-        
-        # 2. Foundation/Floor
-        self._add_floor(ox, oy, oz, W, D, materials.foundation)
-        
-        # 3. Walls (shell)
-        self._add_walls(ox, oy, oz, W, H, D, materials.wall)
-        
-        # 4. Carve openings
-        for opening in building.openings:
-            self._carve_opening(ox, oy, oz, opening)
-        
-        # 5. Place doors and windows
-        for opening in building.openings:
-            if opening.type == "door":
-                self._place_door(ox, oy, oz, opening, materials.door)
-            else:
-                self._place_window(ox, oy, oz, opening, materials.window)
-        
-        # 6. Build roof
-        if building.roof.type == "gable":
-            self._add_gable_roof(ox, oy, oz, W, H, D, R, overhang, materials.roof)
-        elif building.roof.type == "flat":
-            self._add_flat_roof(ox, oy, oz, W, H, D, overhang, materials.roof)
-        
-        # 7. Add decorations
-        self._add_decorations(ox, oy, oz, W, H, D, style.decor)
-        
+
+        total_width = sum(s.width_blocks for s in segments)
+        max_height = max(s.wall_height_blocks for s in segments)
+        segments_with_roof = [s for s in segments if s.roof]
+        max_roof = max((s.roof.height_blocks for s in segments_with_roof), default=0)
+        max_overhang = max((s.roof.overhang for s in segments_with_roof), default=0)
+        depth = segments[0].depth_blocks if segments else 10
+
+        self._add_clear_command(
+            ox, oy, oz, total_width, max_height, max_roof, depth, max_overhang
+        )
+
+        segment_offset_x = 0
+        for building in segments:
+            W = building.width_blocks
+            H = building.wall_height_blocks
+            D = building.depth_blocks
+            seg_ox = ox + segment_offset_x
+
+            self._add_floor(seg_ox, oy, oz, W, D, materials.foundation)
+            self._add_walls(seg_ox, oy, oz, W, H, D, materials.wall)
+            for opening in building.openings:
+                self._carve_opening(seg_ox, oy, oz, opening)
+            for opening in building.openings:
+                if opening.type == "door":
+                    self._place_door(seg_ox, oy, oz, opening, materials.door)
+                else:
+                    self._place_window(seg_ox, oy, oz, opening, materials.window)
+            if building.roof and building.roof.type in ("gable", "hip"):
+                R = building.roof.height_blocks
+                overhang = building.roof.overhang
+                self._add_gable_roof(seg_ox, oy, oz, W, H, D, R, overhang, materials.roof)
+            self._add_decorations(seg_ox, oy, oz, W, H, D, style.decor)
+
+            segment_offset_x += W
         return self.placements
     
     def _add_clear_command(self, ox: int, oy: int, oz: int, W: int, H: int, R: int, D: int, overhang: int):
@@ -189,18 +186,6 @@ class BlockPlanner:
                         block_type=material
                     ))
     
-    def _add_flat_roof(self, ox: int, oy: int, oz: int, W: int, H: int, D: int, overhang: int, material: str):
-        """Add a flat roof."""
-        y = oy + H + 1
-        for x in range(ox - overhang, ox + W + overhang):
-            for z in range(oz - overhang, oz + D + overhang):
-                self.placements.append(BlockPlacement(
-                    x=x,
-                    y=y,
-                    z=z,
-                    block_type=material
-                ))
-    
     def _add_decorations(self, ox: int, oy: int, oz: int, W: int, H: int, D: int, decor: List[str]):
         """Add decorative elements."""
         # Add lanterns near doors
@@ -259,23 +244,17 @@ class BlockPlanner:
 
 
 def get_block_count(blueprint) -> int:
-    """Estimate total block count for a blueprint."""
-    building = blueprint.building
-    
-    # Floor
-    floor = building.width_blocks * building.depth_blocks
-    
-    # Walls (approximate)
-    wall_perimeter = 2 * (building.width_blocks + building.depth_blocks)
-    walls = wall_perimeter * building.wall_height_blocks
-    
-    # Roof (approximate)
-    if building.roof.type == "gable":
-        roof = building.width_blocks * building.depth_blocks * building.roof.height_blocks // 2
-    else:
-        roof = building.width_blocks * building.depth_blocks
-    
-    # Decorations
-    decor = len(blueprint.style.decor) * 5
-    
-    return floor + walls + roof + decor
+    """Estimate total block count for a blueprint (single or multi-segment)."""
+    segments = blueprint.get_segments()
+    total = 0
+    for building in segments:
+        floor = building.width_blocks * building.depth_blocks
+        wall_perimeter = 2 * (building.width_blocks + building.depth_blocks)
+        walls = wall_perimeter * building.wall_height_blocks
+        if building.roof and building.roof.type in ("gable", "hip"):
+            roof = building.width_blocks * building.depth_blocks * building.roof.height_blocks // 2
+        else:
+            roof = 0
+        total += floor + walls + roof
+    total += len(blueprint.style.decor) * 5
+    return total

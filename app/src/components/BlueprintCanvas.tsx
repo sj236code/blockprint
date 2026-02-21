@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react';
-import type { Blueprint } from '@/types';
+import type { Blueprint, Building } from '@/types';
+import { getBlueprintSegments } from '@/types';
 
 interface BlueprintCanvasProps {
   blueprint: Blueprint;
@@ -7,9 +8,9 @@ interface BlueprintCanvasProps {
 }
 
 /** Normalize roof type (API may return "Gable" etc.) */
-function normalizeRoofType(type: string): 'gable' | 'flat' | 'hip' {
+function normalizeRoofType(type: string): 'gable' | 'hip' {
   const t = String(type).toLowerCase();
-  if (t === 'flat' || t === 'hip') return t;
+  if (t === 'hip') return 'hip';
   return 'gable';
 }
 
@@ -23,10 +24,13 @@ export function BlueprintCanvas({ blueprint, className }: BlueprintCanvasProps) 
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
-    const { building } = blueprint;
-    const { width_blocks, wall_height_blocks, roof, openings } = building;
-    const roofType = normalizeRoofType(roof.type);
-    const totalHeight = wall_height_blocks + roof.height_blocks;
+    const segments = getBlueprintSegments(blueprint);
+    if (segments.length === 0) return;
+
+    const totalWidthBlocks = segments.reduce((s, seg) => s + seg.width_blocks, 0);
+    const maxTotalHeight = Math.max(
+      ...segments.map(seg => seg.wall_height_blocks + (seg.roof?.height_blocks ?? 0))
+    );
     const dpr = window.devicePixelRatio || 1;
     const padding = 40;
 
@@ -42,120 +46,31 @@ export function BlueprintCanvas({ blueprint, className }: BlueprintCanvasProps) 
 
       const availableWidth = rect.width - padding * 2;
       const availableHeight = rect.height - padding * 2;
-      const scaleX = availableWidth / width_blocks;
-      const scaleY = availableHeight / totalHeight;
+      const scaleX = availableWidth / totalWidthBlocks;
+      const scaleY = availableHeight / maxTotalHeight;
       const scale = Math.min(scaleX, scaleY);
 
-      const offsetX = (rect.width - width_blocks * scale) / 2;
-      // Ground at offsetY; building top at offsetY - totalHeight*scale. Center building vertically.
-      const offsetY = (rect.height + totalHeight * scale) / 2;
+      const baseOffsetX = (rect.width - totalWidthBlocks * scale) / 2;
+      const offsetY = (rect.height + maxTotalHeight * scale) / 2;
 
-      const gridTopY = offsetY - totalHeight * scale;
-      const roofLeftPx = offsetX - roof.overhang * scale;
-      const roofWidthPx = (width_blocks + 2 * roof.overhang) * scale;
-      const roofBaseY = offsetY - wall_height_blocks * scale;
-      const roofFullWidth = (width_blocks + 2 * roof.overhang) * scale;
-      const roofLeftX = offsetX - roof.overhang * scale;
+      context.clearRect(0, 0, rect.width, rect.height);
 
-      function draw() {
-        context.clearRect(0, 0, rect.width, rect.height);
-
-        // Grid (walls + roof area)
-        context.strokeStyle = 'rgba(255, 255, 255, 0.05)';
-        context.lineWidth = 1;
-        for (let x = 0; x <= width_blocks; x++) {
-          context.beginPath();
-          context.moveTo(offsetX + x * scale, offsetY);
-          context.lineTo(offsetX + x * scale, gridTopY);
-          context.stroke();
-        }
-        for (let x = 0; x <= width_blocks + 2 * roof.overhang; x++) {
-          const px = roofLeftPx + x * scale;
-          if (px < offsetX || px > offsetX + width_blocks * scale) {
-            context.beginPath();
-            context.moveTo(px, offsetY - wall_height_blocks * scale);
-            context.lineTo(px, gridTopY);
-            context.stroke();
-          }
-        }
-        for (let y = 0; y <= wall_height_blocks; y++) {
-          context.beginPath();
-          context.moveTo(offsetX, offsetY - y * scale);
-          context.lineTo(offsetX + width_blocks * scale, offsetY - y * scale);
-          context.stroke();
-        }
-        for (let y = 1; y <= roof.height_blocks; y++) {
-          context.beginPath();
-          context.moveTo(roofLeftPx, offsetY - wall_height_blocks * scale - y * scale);
-          context.lineTo(roofLeftPx + roofWidthPx, offsetY - wall_height_blocks * scale - y * scale);
-          context.stroke();
-        }
-
-        // Walls (full height)
-        context.fillStyle = 'rgba(139, 105, 20, 0.6)';
-        context.fillRect(
-          offsetX,
-          offsetY - wall_height_blocks * scale,
-          width_blocks * scale,
-          wall_height_blocks * scale
-        );
-
-        // Roof (full) – always drawn so the triangular/gable shape is visible
-        context.fillStyle = 'rgba(139, 69, 19, 0.85)';
-        context.strokeStyle = 'rgba(100, 50, 10, 0.5)';
-        context.lineWidth = 1;
-        if (roofType === 'gable') {
-          for (let r = 0; r < roof.height_blocks; r++) {
-            const stepWidth = roofFullWidth * (1 - r / roof.height_blocks);
-            const stepLeftX = roofLeftX + (roofFullWidth - stepWidth) / 2;
-            const stepTopY = roofBaseY - (r + 1) * scale;
-            const stepHeight = scale;
-            context.fillRect(stepLeftX, stepTopY, stepWidth, stepHeight);
-            context.strokeRect(stepLeftX, stepTopY, stepWidth, stepHeight);
-          }
-        } else if (roofType === 'flat') {
-          const flatHeight = 2 * scale;
-          context.fillRect(roofLeftX, roofBaseY - flatHeight, roofFullWidth, flatHeight);
-          context.strokeRect(roofLeftX, roofBaseY - flatHeight, roofFullWidth, flatHeight);
-        } else if (roofType === 'hip') {
-          const centerX = roofLeftX + roofFullWidth / 2;
-          for (let r = 0; r < roof.height_blocks; r++) {
-            const halfStepWidth = (roofFullWidth / 2) * (1 - r / roof.height_blocks);
-            const stepTopY = roofBaseY - (r + 1) * scale;
-            const stepHeight = scale;
-            context.fillRect(roofLeftX, stepTopY, halfStepWidth, stepHeight);
-            context.strokeRect(roofLeftX, stepTopY, halfStepWidth, stepHeight);
-            context.fillRect(centerX, stepTopY, halfStepWidth, stepHeight);
-            context.strokeRect(centerX, stepTopY, halfStepWidth, stepHeight);
-          }
-        }
-
-        // Openings (doors and windows)
-        openings.forEach(opening => {
-          if (opening.type === 'door') {
-            context.fillStyle = 'rgba(101, 67, 33, 0.9)';
-          } else {
-            context.fillStyle = 'rgba(135, 206, 235, 0.5)';
-          }
-          const oy = offsetY - (opening.y + opening.h) * scale;
-          context.fillRect(offsetX + opening.x * scale, oy, opening.w * scale, opening.h * scale);
-          context.strokeStyle = 'rgba(255, 255, 255, 0.3)';
-          context.lineWidth = 1;
-          context.strokeRect(offsetX + opening.x * scale, oy, opening.w * scale, opening.h * scale);
-        });
-
-        // Dimensions label
-        context.fillStyle = 'rgba(255, 255, 255, 0.6)';
-        context.font = '12px sans-serif';
-        context.textAlign = 'center';
-        context.fillText(
-          `${width_blocks} blocks`,
-          offsetX + (width_blocks * scale) / 2,
-          offsetY + 20
-        );
+      let segmentOffsetX = 0;
+      for (const building of segments) {
+        const segBaseX = baseOffsetX + segmentOffsetX * scale;
+        drawSegment(context, building, segBaseX, offsetY, scale);
+        segmentOffsetX += building.width_blocks;
       }
 
-      draw();
+      // Dimensions label (total width)
+      context.fillStyle = 'rgba(255, 255, 255, 0.6)';
+      context.font = '12px sans-serif';
+      context.textAlign = 'center';
+      context.fillText(
+        `${totalWidthBlocks} blocks total`,
+        baseOffsetX + (totalWidthBlocks * scale) / 2,
+        offsetY + 20
+      );
     }
 
     run();
@@ -173,4 +88,99 @@ export function BlueprintCanvas({ blueprint, className }: BlueprintCanvasProps) 
       />
     </div>
   );
+}
+
+function drawSegment(
+  context: CanvasRenderingContext2D,
+  building: Building,
+  offsetX: number,
+  offsetY: number,
+  scale: number
+) {
+  const { width_blocks, wall_height_blocks, roof, openings } = building;
+  const totalHeight = wall_height_blocks + (roof?.height_blocks ?? 0);
+  const gridTopY = offsetY - totalHeight * scale;
+
+  // Grid (walls, and roof if present)
+  context.strokeStyle = 'rgba(255, 255, 255, 0.05)';
+  context.lineWidth = 1;
+  for (let x = 0; x <= width_blocks; x++) {
+    context.beginPath();
+    context.moveTo(offsetX + x * scale, offsetY);
+    context.lineTo(offsetX + x * scale, gridTopY);
+    context.stroke();
+  }
+  for (let y = 0; y <= wall_height_blocks; y++) {
+    context.beginPath();
+    context.moveTo(offsetX, offsetY - y * scale);
+    context.lineTo(offsetX + width_blocks * scale, offsetY - y * scale);
+    context.stroke();
+  }
+  if (roof) {
+    for (let y = 1; y <= roof.height_blocks; y++) {
+      const roofLeftPx = offsetX - roof.overhang * scale;
+      const roofWidthPx = (width_blocks + 2 * roof.overhang) * scale;
+      context.beginPath();
+      context.moveTo(roofLeftPx, offsetY - wall_height_blocks * scale - y * scale);
+      context.lineTo(roofLeftPx + roofWidthPx, offsetY - wall_height_blocks * scale - y * scale);
+      context.stroke();
+    }
+  }
+
+  // Walls
+  context.fillStyle = 'rgba(139, 105, 20, 0.6)';
+  context.fillRect(
+    offsetX,
+    offsetY - wall_height_blocks * scale,
+    width_blocks * scale,
+    wall_height_blocks * scale
+  );
+
+  // Roof (only when segment has a roof)
+  if (roof) {
+    const roofType = normalizeRoofType(roof.type);
+    const roofLeftPx = offsetX - roof.overhang * scale;
+    const roofWidthPx = (width_blocks + 2 * roof.overhang) * scale;
+    const roofBaseY = offsetY - wall_height_blocks * scale;
+    const roofFullWidth = (width_blocks + 2 * roof.overhang) * scale;
+    const roofLeftX = offsetX - roof.overhang * scale;
+    context.fillStyle = 'rgba(139, 69, 19, 0.85)';
+    context.strokeStyle = 'rgba(100, 50, 10, 0.5)';
+    context.lineWidth = 1;
+    if (roofType === 'gable') {
+      for (let r = 0; r < roof.height_blocks; r++) {
+        const stepWidth = roofFullWidth * (1 - r / roof.height_blocks);
+        const stepLeftX = roofLeftX + (roofFullWidth - stepWidth) / 2;
+        const stepTopY = roofBaseY - (r + 1) * scale;
+        const stepHeight = scale;
+        context.fillRect(stepLeftX, stepTopY, stepWidth, stepHeight);
+        context.strokeRect(stepLeftX, stepTopY, stepWidth, stepHeight);
+      }
+    } else if (roofType === 'hip') {
+      const centerX = roofLeftX + roofFullWidth / 2;
+      for (let r = 0; r < roof.height_blocks; r++) {
+        const halfStepWidth = (roofFullWidth / 2) * (1 - r / roof.height_blocks);
+        const stepTopY = roofBaseY - (r + 1) * scale;
+        const stepHeight = scale;
+        context.fillRect(roofLeftX, stepTopY, halfStepWidth, stepHeight);
+        context.strokeRect(roofLeftX, stepTopY, halfStepWidth, stepHeight);
+        context.fillRect(centerX, stepTopY, halfStepWidth, stepHeight);
+        context.strokeRect(centerX, stepTopY, halfStepWidth, stepHeight);
+      }
+    }
+  }
+
+  // Openings
+  openings.forEach(opening => {
+    if (opening.type === 'door') {
+      context.fillStyle = 'rgba(101, 67, 33, 0.9)';
+    } else {
+      context.fillStyle = 'rgba(135, 206, 235, 0.5)';
+    }
+    const oy = offsetY - (opening.y + opening.h) * scale;
+    context.fillRect(offsetX + opening.x * scale, oy, opening.w * scale, opening.h * scale);
+    context.strokeStyle = 'rgba(255, 255, 255, 0.3)';
+    context.lineWidth = 1;
+    context.strokeRect(offsetX + opening.x * scale, oy, opening.w * scale, opening.h * scale);
+  });
 }
