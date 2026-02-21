@@ -281,7 +281,7 @@ def _get_blueprint_prompt(style: str) -> str:
     - "hip": hipped roof (slopes on more than two sides, or a pyramid-like top). Use when the roof has a flatter ridge or multiple slopes.
     - "shed": slant / single-pitch roof (one sloping plane; one side is a diagonal/slant, the other side is a vertical line). Use for lean-tos or when only one diagonal is visible. The slant is rendered as stairs; the vertical side as solid blocks.
 
-    ROOF STEEPNESS: Set height_blocks to match how steep the roof looks. Steeper triangle → higher height_blocks (e.g. 5–8). Shallower, wider triangle → lower height_blocks (e.g. 2–4). Narrow tower with tall peak → higher; wide building with low pitch → lower.
+    ROOF STEEPNESS: Set height_blocks to match how steep the roof looks. For triangular (gable) roofs the roof must come to a point at the peak — use at least enough height so the triangle has a sharp tip (e.g. height_blocks at least about half of width_blocks). Steeper → higher (5–8); shallower → lower but still enough to form a point.
 
     Scale conservatively — a typical small house fits in 12×8 blocks. Only go larger if the drawing clearly shows a very wide or tall structure.
 

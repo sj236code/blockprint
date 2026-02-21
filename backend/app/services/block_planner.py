@@ -191,25 +191,29 @@ class BlockPlanner:
                 ))
     
     def _add_gable_roof(self, ox: int, oy: int, oz: int, W: int, H: int, D: int, R: int, overhang: int, material: str):
-        """Add a gable roof with correctly oriented stair blocks."""
-        for i in range(R):
+        """Add a gable roof with correctly oriented stair blocks. Ensures enough layers so the roof comes to a tip (stairs at peak)."""
+        # Minimum layers so top layer has width <= 2 (stairs can form the point)
+        span = W + 2 * overhang
+        r_min = (span + 1) // 2
+        r_max = (span - 1) // 2 + 1
+        R_effective = min(max(R, r_min), r_max)
+        for i in range(R_effective):
             y = oy + H + 1 + i
-            # Each layer steps inward by i blocks on the X axis (gable ridge runs Z axis)
             x1 = ox - overhang + i
             x2 = ox + W - 1 + overhang - i
+            if x1 > x2:
+                break
             z1 = oz - overhang
             z2 = oz + D - 1 + overhang
 
             for z in range(z1, z2 + 1):
                 for x in range(x1, x2 + 1):
-                    # Determine if this block is on the perimeter of this layer
                     on_west  = (x == x1)
                     on_east  = (x == x2)
                     on_north = (z == z1)
                     on_south = (z == z2)
 
                     if on_west:
-                        # Bottom step faces west (away from building center)
                         block = f"{material}[facing=east,half=bottom,shape=straight]"
                     elif on_east:
                         block = f"{material}[facing=west,half=bottom,shape=straight]"
@@ -218,7 +222,6 @@ class BlockPlanner:
                     elif on_south:
                         block = f"{material}[facing=south,half=bottom,shape=straight]"
                     else:
-                        # Interior fill — use a solid block so there are no gaps
                         block = "spruce_planks"
 
                     self.placements.append(BlockPlacement(x=x, y=y, z=z, block_type=block))
