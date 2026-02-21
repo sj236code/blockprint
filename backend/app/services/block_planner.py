@@ -61,6 +61,9 @@ class BlockPlanner:
                 R = building.roof.height_blocks
                 overhang = building.roof.overhang
                 self._add_gable_roof(seg_ox, oy, oz, W, H, D, R, overhang, materials.roof)
+            else:
+                # No roof: fill the top layer so the structure isn't open
+                self._add_roof_cap(seg_ox, oy, oz, W, H, D, materials.roof)
             self._add_decorations(seg_ox, oy, oz, W, H, D, style.decor)
 
             segment_offset_x += W
@@ -129,6 +132,18 @@ class BlockPlanner:
                     block_type=material
                 ))
     
+    def _add_roof_cap(self, ox: int, oy: int, oz: int, W: int, H: int, D: int, material: str):
+        """Add a single layer on top of the walls to close structures that have no roof."""
+        y_top = oy + H + 1
+        for x in range(W):
+            for z in range(D):
+                self.placements.append(BlockPlacement(
+                    x=ox + x,
+                    y=y_top,
+                    z=oz + z,
+                    block_type=material
+                ))
+    
     def _carve_opening(self, ox: int, oy: int, oz: int, opening):
         """Carve out an opening (replace with air). Doors are always 1 block wide and 2 blocks tall in the build."""
         w = 1 if opening.type == "door" else opening.w
@@ -171,20 +186,37 @@ class BlockPlanner:
                 ))
     
     def _add_gable_roof(self, ox: int, oy: int, oz: int, W: int, H: int, D: int, R: int, overhang: int, material: str):
-        """Add a gable roof."""
+        """Add a gable roof with correctly oriented stair blocks."""
         for i in range(R):
             y = oy + H + 1 + i
+            # Each layer steps inward by i blocks on the X axis (gable ridge runs Z axis)
             x1 = ox - overhang + i
-            x2 = ox + W + overhang - 1 - i
-            
-            for x in range(x1, x2 + 1):
-                for z in range(oz - overhang, oz + D + overhang):
-                    self.placements.append(BlockPlacement(
-                        x=x,
-                        y=y,
-                        z=z,
-                        block_type=material
-                    ))
+            x2 = ox + W - 1 + overhang - i
+            z1 = oz - overhang
+            z2 = oz + D - 1 + overhang
+
+            for z in range(z1, z2 + 1):
+                for x in range(x1, x2 + 1):
+                    # Determine if this block is on the perimeter of this layer
+                    on_west  = (x == x1)
+                    on_east  = (x == x2)
+                    on_north = (z == z1)
+                    on_south = (z == z2)
+
+                    if on_west:
+                        # Bottom step faces west (away from building center)
+                        block = f"{material}[facing=east,half=bottom,shape=straight]"
+                    elif on_east:
+                        block = f"{material}[facing=west,half=bottom,shape=straight]"
+                    elif on_north:
+                        block = f"{material}[facing=north,half=bottom,shape=straight]"
+                    elif on_south:
+                        block = f"{material}[facing=south,half=bottom,shape=straight]"
+                    else:
+                        # Interior fill — use a solid block so there are no gaps
+                        block = "spruce_planks"
+
+                    self.placements.append(BlockPlacement(x=x, y=y, z=z, block_type=block))
     
     def _add_decorations(self, ox: int, oy: int, oz: int, W: int, H: int, D: int, decor: List[str]):
         """Add decorative elements."""
@@ -254,7 +286,7 @@ def get_block_count(blueprint) -> int:
         if building.roof and building.roof.type in ("gable", "hip"):
             roof = building.width_blocks * building.depth_blocks * building.roof.height_blocks // 2
         else:
-            roof = 0
+            roof = building.width_blocks * building.depth_blocks  # one cap layer
         total += floor + walls + roof
     total += len(blueprint.style.decor) * 5
     return total
