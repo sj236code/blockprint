@@ -57,10 +57,15 @@ class BlockPlanner:
                     self._place_door(seg_ox, oy, oz, opening, materials.door)
                 else:
                     self._place_window(seg_ox, oy, oz, opening, materials.window)
-            if building.roof and building.roof.type in ("gable", "hip"):
+            if building.roof:
                 R = building.roof.height_blocks
                 overhang = building.roof.overhang
-                self._add_gable_roof(seg_ox, oy, oz, W, H, D, R, overhang, materials.roof)
+                if building.roof.type in ("gable", "hip"):
+                    self._add_gable_roof(seg_ox, oy, oz, W, H, D, R, overhang, materials.roof)
+                elif building.roof.type == "shed":
+                    self._add_shed_roof(seg_ox, oy, oz, W, H, D, R, overhang, materials.roof)
+                else:
+                    self._add_gable_roof(seg_ox, oy, oz, W, H, D, R, overhang, materials.roof)
             else:
                 # No roof: fill the top layer so the structure isn't open
                 self._add_roof_cap(seg_ox, oy, oz, W, H, D, materials.roof)
@@ -218,6 +223,28 @@ class BlockPlanner:
 
                     self.placements.append(BlockPlacement(x=x, y=y, z=z, block_type=block))
     
+    def _add_shed_roof(self, ox: int, oy: int, oz: int, W: int, H: int, D: int, R: int, overhang: int, material: str):
+        """Add a shed (slant) roof: slanted side = stairs, vertical side = solid blocks."""
+        for i in range(R):
+            y = oy + H + 1 + i
+            x1 = ox - overhang + i
+            x2 = ox + W - 1 + overhang
+            z1 = oz - overhang
+            z2 = oz + D - 1 + overhang
+            for z in range(z1, z2 + 1):
+                for x in range(x1, x2 + 1):
+                    on_west = x == x1   # slanted edge (steps up) -> stairs
+                    on_east = x == x2   # vertical side -> solid blocks
+                    on_north = z == z1
+                    on_south = z == z2
+                    if on_west:
+                        block = f"{material}[facing=east,half=bottom,shape=straight]"
+                    elif on_east or on_north or on_south:
+                        block = "spruce_planks"
+                    else:
+                        block = "spruce_planks"
+                    self.placements.append(BlockPlacement(x=x, y=y, z=z, block_type=block))
+    
     def _add_decorations(self, ox: int, oy: int, oz: int, W: int, H: int, D: int, decor: List[str]):
         """Add decorative elements."""
         # Add lanterns near doors
@@ -283,7 +310,7 @@ def get_block_count(blueprint) -> int:
         floor = building.width_blocks * building.depth_blocks
         wall_perimeter = 2 * (building.width_blocks + building.depth_blocks)
         walls = wall_perimeter * building.wall_height_blocks
-        if building.roof and building.roof.type in ("gable", "hip"):
+        if building.roof and building.roof.type in ("gable", "hip", "shed"):
             roof = building.width_blocks * building.depth_blocks * building.roof.height_blocks // 2
         else:
             roof = building.width_blocks * building.depth_blocks  # one cap layer

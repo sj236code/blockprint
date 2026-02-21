@@ -9,8 +9,9 @@ class OpeningType(str, Enum):
 
 
 class RoofType(str, Enum):
-    GABLE = "gable"
-    HIP = "hip"
+    GABLE = "gable"   # symmetric triangular (peak in center)
+    HIP = "hip"      # hipped (slopes on multiple sides)
+    SHED = "shed"    # slant / single-pitch (one sloping plane)
 
 
 class Opening(BaseModel):
