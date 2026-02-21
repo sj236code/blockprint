@@ -233,17 +233,20 @@ def _extract_json_from_content(content: str) -> dict:
 
 def _get_blueprint_prompt(style: str) -> str:
     """Build the user prompt for blueprint extraction (shared by OpenAI and Gemini)."""
-    return f"""Analyze the uploaded image of a front-view building outline (pen on white paper). Infer a simple parametric building.
+    return f"""
+    
+    Analyze the uploaded image of a front-view building outline (pen on white paper). Infer a simple parametric building.
+    Scale conservatively — a typical small house fits in 12×8 blocks footprint. Only go larger if the drawing clearly shows a very wide or tall structure.
 
 Rules:
 - view must be "front"
-- width_blocks: integer 10..80, default 24 if unsure
+- width_blocks: integer 8..80, default 24 if unsure
 - wall_height_blocks: integer 6..60, default 12 if unsure
 - depth_blocks: integer 6..60, default 10 if unsure
 - roof.type in ["gable","flat","hip"]
 - roof.height_blocks: integer 2..40, default 7 if unsure
 - roof.overhang: integer 0..4, default 1 if unsure
-- openings: include a door if visible; include windows if visible; else empty list
+- openings: include a door if visible; include windows if visible; else empty list. Door is always 1 block wide and 2 blocks tall (w: 1, h: 2).
 - style.theme must be "{style}" unless user overrides
 - Use only these blocks:
   foundation: mossy_cobblestone
@@ -258,16 +261,16 @@ JSON Schema:
 {{
   "view": "front",
   "building": {{
-    "width_blocks": 24,
-    "wall_height_blocks": 12,
-    "depth_blocks": 10,
+    "width_blocks": 14,
+    "wall_height_blocks": 6,
+    "depth_blocks": 8,
     "roof": {{
       "type": "gable",
-      "height_blocks": 7,
+      "height_blocks": 4,
       "overhang": 1
     }},
     "openings": [
-      {{"type":"door","x":11,"y":0,"w":2,"h":4}},
+      {{"type":"door","x":11,"y":0,"w":1,"h":2}},
       {{"type":"window","x":4,"y":5,"w":3,"h":3}}
     ]
   }},
@@ -455,7 +458,7 @@ class AIClient:
                     "overhang": 1
                 },
                 "openings": [
-                    {"type": "door", "x": 11, "y": 0, "w": 2, "h": 4},
+                    {"type": "door", "x": 11, "y": 0, "w": 1, "h": 2},
                     {"type": "window", "x": 4, "y": 5, "w": 3, "h": 3},
                     {"type": "window", "x": 17, "y": 5, "w": 3, "h": 3}
                 ]
