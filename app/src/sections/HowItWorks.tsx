@@ -1,145 +1,220 @@
-import { useEffect, useState, useRef } from 'react';
+import { useRef, useEffect, useState } from 'react';
 import { cn } from '@/lib/utils';
-import { ArrowRight, Sparkles } from 'lucide-react';
+import { 
+  Upload, 
+  Brain, 
+  ShieldCheck, 
+  Hammer,
+  ArrowRight
+} from 'lucide-react';
 
-export function Hero() {
+const steps = [
+  {
+    icon: Upload,
+    title: 'Upload',
+    description: 'Draw a building outline on paper and upload it as a PNG or JPG image.',
+    color: 'from-blue-500/20 to-cyan-500/20',
+    iconColor: 'text-blue-400',
+  },
+  {
+    icon: Brain,
+    title: 'AI Analysis',
+    description: 'Our vision AI analyzes your drawing and extracts structural blueprint data.',
+    color: 'from-purple-500/20 to-pink-500/20',
+    iconColor: 'text-purple-400',
+  },
+  {
+    icon: ShieldCheck,
+    title: 'Validation',
+    description: 'The backend validates and optimizes the blueprint for Minecraft compatibility.',
+    color: 'from-amber-500/20 to-orange-500/20',
+    iconColor: 'text-amber-400',
+  },
+  {
+    icon: Hammer,
+    title: 'Live Build',
+    description: 'RCON commands construct your building block by block in real-time.',
+    color: 'from-green-500/20 to-emerald-500/20',
+    iconColor: 'text-green-400',
+  },
+];
+
+export function HowItWorks() {
   const [isVisible, setIsVisible] = useState(false);
-  const heroRef = useRef<HTMLDivElement>(null);
+  const [activeStep, setActiveStep] = useState(0);
+  const sectionRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    // Trigger entrance animation
-    const timer = setTimeout(() => setIsVisible(true), 100);
-    return () => clearTimeout(timer);
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) {
+          setIsVisible(true);
+          observer.disconnect();
+        }
+      },
+      { threshold: 0.2 }
+    );
+
+    if (sectionRef.current) {
+      observer.observe(sectionRef.current);
+    }
+
+    return () => observer.disconnect();
   }, []);
 
-  const scrollToUpload = () => {
-    const uploadSection = document.getElementById('upload-section');
-    if (uploadSection) {
-      uploadSection.scrollIntoView({ behavior: 'smooth' });
-    }
-  };
+  // Animate steps sequentially
+  useEffect(() => {
+    if (!isVisible) return;
+
+    const interval = setInterval(() => {
+      setActiveStep(prev => {
+        if (prev >= steps.length - 1) {
+          clearInterval(interval);
+          return prev;
+        }
+        return prev + 1;
+      });
+    }, 400);
+
+    return () => clearInterval(interval);
+  }, [isVisible]);
 
   return (
     <section 
-      ref={heroRef}
-      className="relative min-h-screen flex items-center justify-center overflow-hidden"
+      ref={sectionRef}
+      className="relative py-24 px-6"
     >
-      {/* Dark gradient - matches site dark theme */}
-      <div className="absolute inset-0 bg-gradient-to-b from-[#0d1a0a] via-[#1a2d12] to-[#0d1a0a]" />
+      {/* Background - underground/cave gradient */}
+      <div className="absolute inset-0 bg-gradient-to-b from-[#0d1a0a] via-[#1a2d12] to-[#0d1a0a] block-pattern" />
       
-      {/* Content */}
-      <div className="relative z-10 max-w-4xl mx-auto px-6 text-center">
-        {/* Badge - blocky */}
+      <div className="relative z-10 max-w-6xl mx-auto">
+        {/* Section Header */}
         <div 
           className={cn(
-            'inline-flex items-center gap-2 px-4 py-2 mb-8 font-minecraft',
-            'bg-[#5a7c4a]/90 border-2 border-[#4a6b3a]',
+            'text-center mb-16',
             'transition-all duration-700 ease-out',
-            isVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'
+            isVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'
           )}
         >
-          <Sparkles className="w-4 h-4 text-[#7CBD6B]" />
-          <span className="text-sm text-white">AI-Powered Minecraft Builder</span>
+          <h2 className="text-3xl sm:text-4xl font-bold text-white mb-4 font-minecraft">
+            How It Works
+          </h2>
+          <p className="text-white/60 max-w-lg mx-auto">
+            From a simple sketch to a fully-built Minecraft structure in four easy steps.
+          </p>
         </div>
 
-        {/* Title - blocky Minecraft style */}
-        <h1 
-          className={cn(
-            'text-4xl sm:text-5xl md:text-6xl lg:text-7xl font-bold font-minecraft mb-6',
-            'leading-tight tracking-tight text-white drop-shadow-[2px_2px_0_rgba(0,0,0,0.5)]',
-            'transition-all duration-700 delay-150 ease-out',
-            isVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'
-          )}
-        >
-          Turn Drawings into{' '}
-          <span className="relative inline-block">
-            <span className="text-transparent bg-clip-text bg-gradient-to-r from-[#7CBD6B] via-[#5a8c4a] to-[#57C2C5]">
-              Minecraft Worlds
-            </span>
-            <span 
-              className={cn(
-                'absolute -bottom-2 left-0 h-2 bg-[#5a8c4a] border-b-2 border-[#4a6b3a]',
-                'transition-all duration-1000 delay-500 ease-out',
-                isVisible ? 'w-full' : 'w-0'
-              )}
+        {/* Steps */}
+        <div className="relative">
+          {/* Connection line - Minecraft block line */}
+          <div className="hidden lg:block absolute top-24 left-0 right-0 h-1 bg-[#1a2d12] border-y border-[#4a5b3a]">
+            <div 
+              className="h-full bg-[#7CBD6B] transition-all duration-1000 ease-out"
+              style={{ width: `${(activeStep / (steps.length - 1)) * 100}%` }}
             />
-          </span>
-        </h1>
+          </div>
 
-        {/* Subtitle */}
-        <p 
-          className={cn(
-            'text-lg sm:text-xl text-white/90 mb-10 max-w-2xl mx-auto drop-shadow-md',
-            'transition-all duration-700 delay-300 ease-out',
-            isVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'
-          )}
-        >
-          Upload a building sketch and watch AI transform it into a live Minecraft structure. 
-          From paper to pixels in seconds.
-        </p>
+          {/* Steps grid */}
+          <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-8">
+            {steps.map((step, index) => {
+              const Icon = step.icon;
+              const isActive = index <= activeStep;
+              
+              return (
+                <div
+                  key={index}
+                  className={cn(
+                    'relative text-center',
+                    'transition-all duration-500 ease-out',
+                    isVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8',
+                    { 'transition-delay': `${index * 100}ms` }
+                  )}
+                  style={{ transitionDelay: `${index * 100}ms` }}
+                >
+                  {/* Icon - blocky */}
+                  <div 
+                    className={cn(
+                      'relative w-20 h-20 mx-auto mb-6 flex items-center justify-center border-2 transition-all duration-500',
+                      isActive 
+                        ? 'border-[#7CBD6B] bg-[#5a8c4a]/30 scale-100' 
+                        : 'border-[#4a5b3a] bg-[#0d1a0a]/60 scale-95 opacity-50'
+                    )}
+                  >
+                    <div className={cn(
+                      'absolute inset-0 bg-gradient-to-br opacity-50 pointer-events-none',
+                      step.color
+                    )} />
+                    
+                    <Icon className={cn(
+                      'relative z-10 w-8 h-8 transition-colors duration-500',
+                      isActive ? step.iconColor : 'text-white/30'
+                    )} />
+                    
+                    {/* Step number - blocky */}
+                    <div className={cn(
+                      'absolute -top-2 -right-2 w-6 h-6 flex items-center justify-center text-xs font-bold font-minecraft border border-[#4a5b3a]',
+                      'transition-all duration-500',
+                      isActive 
+                        ? 'bg-[#7CBD6B] text-[#0d1a0a]' 
+                        : 'bg-[#1a2d12] text-white/30'
+                    )}>
+                      {index + 1}
+                    </div>
+                  </div>
 
-        {/* CTA Buttons - Minecraft style */}
+                  {/* Content */}
+                  <h3 className={cn(
+                    'text-lg font-semibold mb-2 transition-colors duration-500',
+                    isActive ? 'text-white' : 'text-white/30'
+                  )}>
+                    {step.title}
+                  </h3>
+                  <p className={cn(
+                    'text-sm leading-relaxed transition-colors duration-500',
+                    isActive ? 'text-white/60' : 'text-white/20'
+                  )}>
+                    {step.description}
+                  </p>
+
+                  {/* Mobile arrow */}
+                  {index < steps.length - 1 && (
+                    <div className="lg:hidden flex justify-center mt-4">
+                      <ArrowRight className={cn(
+                        'w-5 h-5 rotate-90 transition-colors duration-500',
+                        isActive ? 'text-white/30' : 'text-white/10'
+                      )} />
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Tech stack - blocky */}
         <div 
           className={cn(
-            'flex flex-col sm:flex-row items-center justify-center gap-4',
-            'transition-all duration-700 delay-450 ease-out',
+            'mt-20 p-6 border-2 border-[#4a5b3a] font-minecraft',
+            'bg-[#0d1a0a]/80',
+            'transition-all duration-700 delay-500 ease-out',
             isVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'
           )}
         >
-          <button
-            onClick={scrollToUpload}
-            className={cn(
-              'group relative px-8 py-4 font-medium font-minecraft text-white',
-              'bg-[#7CBD6B] border-2 border-b-4 border-[#5a8c4a]',
-              'hover:bg-[#8bc46b] hover:border-[#6b9c5a] active:border-b-2 active:translate-y-0.5',
-              'transition-all duration-200 ease-out'
-            )}
-          >
-            <span className="flex items-center gap-2">
-              Start Building
-              <ArrowRight className="w-5 h-5 transition-transform duration-300 group-hover:translate-x-1" />
-            </span>
-          </button>
-
-          <button
-            onClick={scrollToUpload}
-            className={cn(
-              'px-8 py-4 font-medium font-minecraft text-white',
-              'bg-[#8B6914] border-2 border-b-4 border-[#6B4E0A]',
-              'hover:bg-[#9a7a1a] hover:border-[#7a5c12] active:border-b-2 active:translate-y-0.5',
-              'transition-all duration-200 ease-out'
-            )}
-          >
-            See How It Works
-          </button>
-        </div>
-
-      </div>
-
-      {/* Scroll indicator - blocky */}
-      <div 
-        className={cn(
-          'absolute bottom-8 left-1/2 -translate-x-1/2',
-          'transition-all duration-700 delay-700 ease-out',
-          isVisible ? 'opacity-100' : 'opacity-0'
-        )}
-      >
-        <div className="w-6 h-10 border-2 border-[#5a8c4a] bg-[#5a8c4a]/30 flex items-start justify-center p-2">
-          <div 
-            className="w-2 h-2 bg-[#7CBD6B]"
-            style={{
-              animation: 'bounce 1.5s ease-in-out infinite',
-            }}
-          />
+          <h3 className="text-center text-sm font-medium text-white/50 uppercase tracking-wider mb-6">
+            Powered By
+          </h3>
+          <div className="flex flex-wrap items-center justify-center gap-6">
+            {['React', 'FastAPI', 'OpenAI Vision', 'RCON', 'Minecraft Java'].map((tech) => (
+              <div 
+                key={tech}
+                className="px-4 py-2 border-2 border-[#5a6b4a] bg-[#1a2d12]/80 text-sm text-white/80"
+              >
+                {tech}
+              </div>
+            ))}
+          </div>
         </div>
       </div>
-
-      <style>{`
-        @keyframes bounce {
-          0%, 100% { transform: translateY(0); }
-          50% { transform: translateY(12px); }
-        }
-      `}</style>
     </section>
   );
 }
