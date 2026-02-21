@@ -2,28 +2,46 @@
   "view": "front",
   "segments": [
     {
-      "width_blocks": 6,
+      "width_blocks": 12,
       "wall_height_blocks": 8,
       "depth_blocks": 8,
-      "roof": { "type": "gable", "height_blocks": 4, "overhang": 1 },
-      "openings": []
-    },
-    {
-      "width_blocks": 12,
-      "wall_height_blocks": 10,
-      "depth_blocks": 8,
-      "roof": { "type": "gable", "height_blocks": 6, "overhang": 1 },
+      "roof": {
+        "type": "gable",
+        "height_blocks": 5,
+        "overhang": 1
+      },
       "openings": [
-        { "type": "window", "x": 3, "y": 4, "w": 2, "h": 2 },
-        { "type": "window", "x": 8, "y": 6, "w": 2, "h": 2 },
-        { "type": "door", "x": 7, "y": 0, "w": 1, "h": 2 }
+        {
+          "type": "window",
+          "x": 3,
+          "y": 5,
+          "w": 2,
+          "h": 2
+        },
+        {
+          "type": "door",
+          "x": 5,
+          "y": 0,
+          "w": 1,
+          "h": 2
+        }
       ]
     },
     {
       "width_blocks": 6,
-      "wall_height_blocks": 8,
+      "wall_height_blocks": 4,
       "depth_blocks": 8,
-      "roof": { "type": "gable", "height_blocks": 4, "overhang": 1 },
+      "openings": []
+    },
+    {
+      "width_blocks": 8,
+      "wall_height_blocks": 7,
+      "depth_blocks": 8,
+      "roof": {
+        "type": "gable",
+        "height_blocks": 6,
+        "overhang": 1
+      },
       "openings": []
     }
   ],
@@ -37,7 +55,10 @@
       "window": "glass_pane",
       "door": "oak_door"
     },
-    "decor": ["lantern", "leaves"],
+    "decor": [
+      "lantern",
+      "leaves"
+    ],
     "variation": 0.15
   }
 }

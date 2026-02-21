@@ -8,7 +8,7 @@ export interface Opening {
 }
 
 export interface Roof {
-  type: 'gable' | 'hip';
+  type: 'gable' | 'hip' | 'shed';
   height_blocks: number;
   overhang: number;
 }
