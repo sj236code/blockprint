@@ -1,6 +1,6 @@
 # Blockprint
 
-Generate Minecraft building blueprints from an image using AI (OpenAI or Gemini). Upload a sketch or reference image, get a parametric blueprint with dimensions and materials, preview it visually, and optionally build it in-game via RCON.
+Generate Minecraft building blueprints from an image using AI. Upload a sketch or reference image, get a parametric blueprint with dimensions and materials, preview it visually, and optionally build it in-game via RCON.
 
 ## Prerequisites
 

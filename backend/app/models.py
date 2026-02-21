@@ -1,26 +1,31 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, field_validator
+from typing import List, Literal, Optional
+from enum import Enum
 
 
-class RoofSpec(BaseModel):
-    type: str  # gable | flat | hip
-    height_blocks: int
-    overhang: int
+class OpeningType(str, Enum):
+    DOOR = "door"
+    WINDOW = "window"
+
+
+class RoofType(str, Enum):
+    GABLE = "gable"
+    FLAT = "flat"
+    HIP = "hip"
 
 
 class Opening(BaseModel):
-    type: str  # door | window
-    x: int
-    y: int
-    w: int
-    h: int
+    type: OpeningType
+    x: int = Field(..., ge=0)
+    y: int = Field(..., ge=0)
+    w: int = Field(..., ge=1)
+    h: int = Field(..., ge=1)
 
 
-class Building(BaseModel):
-    width_blocks: int
-    wall_height_blocks: int
-    depth_blocks: int
-    roof: RoofSpec
-    openings: list[Opening] = []
+class Roof(BaseModel):
+    type: RoofType
+    height_blocks: int = Field(..., ge=2, le=40)
+    overhang: int = Field(..., ge=0, le=4)
 
 
 class Materials(BaseModel):
@@ -34,18 +39,33 @@ class Materials(BaseModel):
 
 class Style(BaseModel):
     theme: str = "ghibli"
-    materials: Materials = Materials()
-    decor: list[str] = []
-    variation: float = 0.15
+    materials: Materials = Field(default_factory=Materials)
+    decor: List[str] = Field(default_factory=list)
+    variation: float = Field(0.15, ge=0, le=1)
+
+
+class Building(BaseModel):
+    width_blocks: int = Field(..., ge=10, le=80)
+    wall_height_blocks: int = Field(..., ge=6, le=60)
+    depth_blocks: int = Field(..., ge=6, le=60)
+    roof: Roof
+    openings: List[Opening] = Field(default_factory=list)
 
 
 class Blueprint(BaseModel):
-    view: str = "front"
+    view: Literal["front"] = "front"
     building: Building
-    style: Style
+    style: Style = Field(default_factory=Style)
 
 
-class BuildOrigin(BaseModel):
+class BlueprintResponse(BaseModel):
+    success: bool
+    blueprint: Blueprint
+    warnings: List[str] = Field(default_factory=list)
+    raw_ai_json: Optional[dict] = None
+
+
+class Origin(BaseModel):
     x: int
     y: int
     z: int
@@ -53,4 +73,19 @@ class BuildOrigin(BaseModel):
 
 class BuildRequest(BaseModel):
     blueprint: Blueprint
-    origin: BuildOrigin
+    origin: Origin
+
+
+class BuildStatus(BaseModel):
+    status: Literal["idle", "building", "completed", "error"]
+    progress: float = Field(0, ge=0, le=100)
+    blocks_placed: int = 0
+    total_blocks: int = 0
+    current_action: str = ""
+    logs: List[str] = Field(default_factory=list)
+    error: Optional[str] = None
+
+
+class HealthResponse(BaseModel):
+    status: str
+    version: str
