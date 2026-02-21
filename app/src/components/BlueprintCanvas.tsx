@@ -29,7 +29,9 @@ export function BlueprintCanvas({ blueprint, className }: BlueprintCanvasProps) 
 
     const totalWidthBlocks = segments.reduce((s, seg) => s + seg.width_blocks, 0);
     const maxTotalHeight = Math.max(
-      ...segments.map(seg => seg.wall_height_blocks + (seg.roof?.height_blocks ?? 0))
+      ...segments.map(seg =>
+        seg.wall_height_blocks + (seg.roof ? seg.roof.height_blocks : 1)
+      )
     );
     const dpr = window.devicePixelRatio || 1;
     const padding = 40;
@@ -98,7 +100,8 @@ function drawSegment(
   scale: number
 ) {
   const { width_blocks, wall_height_blocks, roof, openings } = building;
-  const totalHeight = wall_height_blocks + (roof?.height_blocks ?? 0);
+  const roofHeight = roof ? roof.height_blocks : 1;
+  const totalHeight = wall_height_blocks + roofHeight;
   const gridTopY = offsetY - totalHeight * scale;
 
   // Grid (walls, and roof if present)
@@ -117,7 +120,7 @@ function drawSegment(
     context.stroke();
   }
   if (roof) {
-    for (let y = 1; y <= roof.height_blocks; y++) {
+    for (let y = 1; y <= roofHeight; y++) {
       const roofLeftPx = offsetX - roof.overhang * scale;
       const roofWidthPx = (width_blocks + 2 * roof.overhang) * scale;
       context.beginPath();
@@ -136,7 +139,7 @@ function drawSegment(
     wall_height_blocks * scale
   );
 
-  // Roof (only when segment has a roof)
+  // Roof or cap (when no roof, draw one layer to close the top)
   if (roof) {
     const roofType = normalizeRoofType(roof.type);
     const roofLeftPx = offsetX - roof.overhang * scale;
@@ -168,6 +171,14 @@ function drawSegment(
         context.strokeRect(centerX, stepTopY, halfStepWidth, stepHeight);
       }
     }
+  } else {
+    const roofBaseY = offsetY - wall_height_blocks * scale;
+    const capHeight = scale;
+    context.fillStyle = 'rgba(139, 69, 19, 0.85)';
+    context.strokeStyle = 'rgba(100, 50, 10, 0.5)';
+    context.lineWidth = 1;
+    context.fillRect(offsetX, roofBaseY - capHeight, width_blocks * scale, capHeight);
+    context.strokeRect(offsetX, roofBaseY - capHeight, width_blocks * scale, capHeight);
   }
 
   // Openings
