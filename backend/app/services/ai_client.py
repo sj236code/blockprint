@@ -15,6 +15,40 @@ _workspace_root = os.path.dirname(_backend_dir)  # workspace root
 DEBUG_LOG_PATH = os.path.join(_workspace_root, ".cursor", "debug.log")
 # #endregion
 
+STYLE_PALETTES = {
+    "ghibli": {
+        "foundation": "mossy_cobblestone",
+        "wall": "oak_planks",
+        "trim": "stripped_oak_log",
+        "roof": "spruce_stairs",
+        "window": "glass_pane",
+        "door": "oak_door",
+    },
+    "medieval": {
+        "foundation": "cobblestone",
+        "wall": "stone_bricks",
+        "trim": "oak_log",
+        "roof": "stone_brick_stairs",
+        "window": "glass_pane",
+        "door": "iron_door",
+    },
+    "modern": {
+        "foundation": "smooth_stone",
+        "wall": "white_concrete",
+        "trim": "iron_block",
+        "roof": "smooth_stone_slab",
+        "window": "tinted_glass",
+        "door": "iron_door",
+    },
+    "fantasy": {
+        "foundation": "purpur_block",
+        "wall": "end_stone_bricks",
+        "trim": "purpur_pillar",
+        "roof": "purpur_stairs",
+        "window": "magenta_stained_glass_pane",
+        "door": "dark_oak_door",
+    },
+}
 
 def _log_debug(message: str, data: dict):
     """Write debug log entry."""
@@ -232,41 +266,70 @@ def _extract_json_from_content(content: str) -> dict:
 
 
 def _get_blueprint_prompt(style: str) -> str:
-    """Build the user prompt for blueprint extraction (shared by OpenAI and Gemini)."""
+    palette = STYLE_PALETTES.get(style, STYLE_PALETTES["ghibli"])
+    
     return f"""
-    Analyze the uploaded image of a front-view building outline (pen on white paper). Infer a parametric building or compound.
+    Analyze the uploaded image of a front-view building outline (pen on white paper). Infer a parametric building or compound. The drawing is always with ground at the bottom and sky at the top; do not invert. Order segments strictly left-to-right as they appear in the image so the build is not mirrored.
 
     SINGLE BUILDING: If the image shows one rectangular structure, return "building" with one object (see schema below).
     MULTI-SEGMENT: If the image shows multiple connected structures (e.g. left wing + center connector + right wing, or several roofs), return "segments": an array of buildings in left-to-right order. Each segment has its own width_blocks, wall_height_blocks, depth_blocks, roof (optional), and openings. Use the same depth_blocks for all segments. If a structure has no triangular roof (e.g. a flat-topped connector between two roofed sections), omit "roof" for that segment or set "roof": null. Only include "roof" when the drawing shows a clear triangular/pitched roof.
 
-    ROOF RULE: Only add a roof when the structure has a triangular (diagonal) roof. Use "roof": {{ "type": "gable" or "hip", "height_blocks": ..., "overhang": ... }} only for segments that have a pitched roof. If there is no triangle roof (e.g. middle connector with a flat top), do not add a roof — omit the "roof" key or set "roof": null for that segment.
+    ROOF RULE: Only add a roof when the structure has a pitched/sloped roof. If there is no roof (e.g. flat-topped connector), omit "roof" or set "roof": null.
+
+    ROOF TYPES — detect and use the correct type from the drawing:
+    - "gable": symmetric triangular roof (peak in the center, two equal slopes). Use for classic house peaks, towers with a centered peak.
+    - "hip": hipped roof (slopes on more than two sides, or a pyramid-like top). Use when the roof has a flatter ridge or multiple slopes.
+    - "shed": slant / single-pitch roof (one sloping plane; one side is a diagonal/slant, the other side is a vertical line). Use for lean-tos or when only one diagonal is visible. The slant is rendered as stairs; the vertical side as solid blocks.
+
+    ROOF STEEPNESS: Set height_blocks to match how steep the roof looks. Steeper triangle → higher height_blocks (e.g. 5–8). Shallower, wider triangle → lower height_blocks (e.g. 2–4). Narrow tower with tall peak → higher; wide building with low pitch → lower.
 
     Scale conservatively — a typical small house fits in 12×8 blocks. Only go larger if the drawing clearly shows a very wide or tall structure.
 
 Rules:
 - view must be "front"
 - Per segment/building: width_blocks 6..80, wall_height_blocks 4..60, depth_blocks 6..60
-- roof: include only when the segment has a triangular roof; use "gable" or "hip", height_blocks 2..40, overhang 0..4. Omit "roof" (or set null) for segments with no roof (e.g. flat-topped connector).
+- roof: include only when the segment has a pitched roof. type must be "gable", "hip", or "shed". height_blocks 2..40 (use to reflect steepness), overhang 0..4. Omit "roof" for segments with no roof.
 - openings: include a door if visible in that segment; include windows if visible. Door is always w: 1, h: 2. Opening x,y are relative to that segment's front face.
-- style.theme must be "{style}" unless user overrides
-- Use only: foundation mossy_cobblestone, wall oak_planks, trim stripped_oak_log, roof spruce_stairs, window glass_pane, door oak_door
+- style.theme must be "{style}"
+- You MUST use exactly these blocks and no others:
+  foundation: {palette['foundation']}
+  wall:       {palette['wall']}
+  trim:       {palette['trim']}
+  roof:       {palette['roof']}
+  window:     {palette['window']}
+  door:       {palette['door']}
 - Return ONLY JSON. No markdown. No extra keys.
 
-Example single building:
+JSON Schema:
 {{
   "view": "front",
   "building": {{
     "width_blocks": 14,
     "wall_height_blocks": 6,
     "depth_blocks": 8,
-    "roof": {{ "type": "gable", "height_blocks": 4, "overhang": 1 }},
+    "roof": {{
+      "type": "gable",
+      "height_blocks": 4,
+      "overhang": 1
+    }},
     "openings": [
-      {{"type":"door","x":11,"y":0,"w":1,"h":2}},
-      {{"type":"window","x":4,"y":5,"w":3,"h":3}}
+      {{"type":"door","x":6,"y":0,"w":1,"h":2}},
+      {{"type":"window","x":2,"y":2,"w":2,"h":2}}
     ]
   }},
-  "style": {{ "theme": "{style}", "materials": {{ "foundation": "mossy_cobblestone", "wall": "oak_planks", "trim": "stripped_oak_log", "roof": "spruce_stairs", "window": "glass_pane", "door": "oak_door" }}, "decor": ["lantern", "leaves"], "variation": 0.15 }}
-}}
+  "style": {{
+    "theme": "{style}",
+    "materials": {{
+      "foundation": "{palette['foundation']}",
+      "wall": "{palette['wall']}",
+      "trim": "{palette['trim']}",
+      "roof": "{palette['roof']}",
+      "window": "{palette['window']}",
+      "door": "{palette['door']}"
+    }},
+    "decor": ["lantern", "leaves"],
+    "variation": 0.15
+  }}
 
 Example multi-segment (left with roof + center with no roof + right with roof):
 {{
@@ -274,9 +337,21 @@ Example multi-segment (left with roof + center with no roof + right with roof):
   "segments": [
     {{ "width_blocks": 10, "wall_height_blocks": 6, "depth_blocks": 8, "roof": {{ "type": "gable", "height_blocks": 4, "overhang": 1 }}, "openings": [ {{"type":"door","x":6,"y":0,"w":1,"h":2}}, {{"type":"window","x":2,"y":4,"w":2,"h":2}} ] }},
     {{ "width_blocks": 6, "wall_height_blocks": 4, "depth_blocks": 8, "openings": [] }},
-    {{ "width_blocks": 8, "wall_height_blocks": 5, "depth_blocks": 8, "roof": {{ "type": "gable", "height_blocks": 3, "overhang": 1 }}, "openings": [] }}
+    {{ "width_blocks": 8, "wall_height_blocks": 5, "depth_blocks": 8, "roof": {{ "type": "gable", "height_blocks": 5, "overhang": 1 }}, "openings": [ {{"type":"window","x":3,"y":3,"w":2,"h":2}} ] }}
   ],
-  "style": {{ "theme": "{style}", "materials": {{ "foundation": "mossy_cobblestone", "wall": "oak_planks", "trim": "stripped_oak_log", "roof": "spruce_stairs", "window": "glass_pane", "door": "oak_door" }}, "decor": ["lantern", "leaves"], "variation": 0.15 }}
+  "style": {{
+    "theme": "{style}",
+    "materials": {{
+      "foundation": "{palette['foundation']}",
+      "wall": "{palette['wall']}",
+      "trim": "{palette['trim']}",
+      "roof": "{palette['roof']}",
+      "window": "{palette['window']}",
+      "door": "{palette['door']}"
+    }},
+    "decor": ["lantern", "leaves"],
+    "variation": 0.15
+  }}
 }}"""
 
 
@@ -435,34 +510,24 @@ class AIClient:
             return _extract_json_from_content(content)
     
     def _get_mock_blueprint(self, style: str) -> dict:
-        """Return a mock blueprint for testing (multi-segment example)."""
+        """Return a mock blueprint for testing."""
         return {
             "view": "front",
-            "segments": [
-                {
-                    "width_blocks": 10,
-                    "wall_height_blocks": 6,
-                    "depth_blocks": 8,
-                    "roof": {"type": "gable", "height_blocks": 4, "overhang": 1},
-                    "openings": [
-                        {"type": "door", "x": 6, "y": 0, "w": 1, "h": 2},
-                        {"type": "window", "x": 2, "y": 4, "w": 2, "h": 2},
-                    ],
+            "building": {
+                "width_blocks": 24,
+                "wall_height_blocks": 12,
+                "depth_blocks": 10,
+                "roof": {
+                    "type": "gable",
+                    "height_blocks": 7,
+                    "overhang": 1
                 },
-                {
-                    "width_blocks": 6,
-                    "wall_height_blocks": 4,
-                    "depth_blocks": 8,
-                    "openings": [],
-                },
-                {
-                    "width_blocks": 8,
-                    "wall_height_blocks": 5,
-                    "depth_blocks": 8,
-                    "roof": {"type": "gable", "height_blocks": 3, "overhang": 1},
-                    "openings": [],
-                },
-            ],
+                "openings": [
+                    {"type": "door", "x": 11, "y": 0, "w": 1, "h": 2},
+                    {"type": "window", "x": 4, "y": 5, "w": 3, "h": 3},
+                    {"type": "window", "x": 17, "y": 5, "w": 3, "h": 3}
+                ]
+            },
             "style": {
                 "theme": style,
                 "materials": {
@@ -471,11 +536,11 @@ class AIClient:
                     "trim": "stripped_oak_log",
                     "roof": "spruce_stairs",
                     "window": "glass_pane",
-                    "door": "oak_door",
+                    "door": "oak_door"
                 },
                 "decor": ["lantern", "leaves", "flower_pot"],
-                "variation": 0.15,
-            },
+                "variation": 0.15
+            }
         }
 
 
