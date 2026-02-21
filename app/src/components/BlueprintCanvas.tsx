@@ -8,9 +8,10 @@ interface BlueprintCanvasProps {
 }
 
 /** Normalize roof type (API may return "Gable" etc.) */
-function normalizeRoofType(type: string): 'gable' | 'hip' {
+function normalizeRoofType(type: string): 'gable' | 'hip' | 'shed' {
   const t = String(type).toLowerCase();
   if (t === 'hip') return 'hip';
+  if (t === 'shed') return 'shed';
   return 'gable';
 }
 
@@ -170,6 +171,14 @@ function drawSegment(
         context.fillRect(centerX, stepTopY, halfStepWidth, stepHeight);
         context.strokeRect(centerX, stepTopY, halfStepWidth, stepHeight);
       }
+    } else if (roofType === 'shed') {
+      context.beginPath();
+      context.moveTo(roofLeftX, roofBaseY);
+      context.lineTo(roofLeftX + roofFullWidth, roofBaseY);
+      context.lineTo(roofLeftX + roofFullWidth, roofBaseY - roof.height_blocks * scale);
+      context.closePath();
+      context.fill();
+      context.stroke();
     }
   } else {
     const roofBaseY = offsetY - wall_height_blocks * scale;
