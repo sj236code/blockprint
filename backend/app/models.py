@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 from typing import List, Literal, Optional
 from enum import Enum
 
@@ -10,7 +10,6 @@ class OpeningType(str, Enum):
 
 class RoofType(str, Enum):
     GABLE = "gable"
-    FLAT = "flat"
     HIP = "hip"
 
 
@@ -45,17 +44,36 @@ class Style(BaseModel):
 
 
 class Building(BaseModel):
-    width_blocks: int = Field(..., ge=8, le=20)
-    wall_height_blocks: int = Field(..., ge=4, le=10)
-    depth_blocks: int = Field(..., ge=6, le=14)
-    roof: Roof
+    width_blocks: int = Field(..., ge=6, le=80)
+    wall_height_blocks: int = Field(..., ge=4, le=60)
+    depth_blocks: int = Field(..., ge=6, le=60)
+    roof: Optional[Roof] = None  # Omit or null when segment has no triangular roof (e.g. connector)
     openings: List[Opening] = Field(default_factory=list)
 
 
 class Blueprint(BaseModel):
     view: Literal["front"] = "front"
-    building: Building
+    building: Optional[Building] = None
+    segments: Optional[List[Building]] = None
     style: Style = Field(default_factory=Style)
+
+    @model_validator(mode="after")
+    def require_building_or_segments(self):
+        if not self.segments and not self.building:
+            raise ValueError("Either 'building' or 'segments' must be set")
+        if self.segments and len(self.segments) == 0:
+            raise ValueError("'segments' must not be empty when set")
+        if self.building is None and self.segments:
+            object.__setattr__(self, "building", self.segments[0])
+        return self
+
+    def get_segments(self) -> List[Building]:
+        """Return the list of building segments (single building as one segment)."""
+        if self.segments:
+            return self.segments
+        if self.building:
+            return [self.building]
+        return []
 
 
 class BlueprintResponse(BaseModel):

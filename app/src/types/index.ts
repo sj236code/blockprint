@@ -8,7 +8,7 @@ export interface Opening {
 }
 
 export interface Roof {
-  type: 'gable' | 'flat' | 'hip';
+  type: 'gable' | 'hip';
   height_blocks: number;
   overhang: number;
 }
@@ -33,14 +33,22 @@ export interface Building {
   width_blocks: number;
   wall_height_blocks: number;
   depth_blocks: number;
-  roof: Roof;
+  roof?: Roof | null;
   openings: Opening[];
 }
 
 export interface Blueprint {
   view: 'front';
-  building: Building;
+  building?: Building | null;
+  segments?: Building[] | null;
   style: Style;
+}
+
+/** Return the list of segments (single building as one segment). */
+export function getBlueprintSegments(blueprint: Blueprint): Building[] {
+  if (blueprint.segments && blueprint.segments.length > 0) return blueprint.segments;
+  if (blueprint.building) return [blueprint.building];
+  return [];
 }
 
 export interface BlueprintResponse {
