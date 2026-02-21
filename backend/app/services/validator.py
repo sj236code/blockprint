@@ -55,7 +55,10 @@ def _apply_safe_defaults(data: dict) -> dict:
         if "w" not in op or op.get("w") is None:
             op["w"] = 1
         if "h" not in op or op.get("h") is None:
-            op["h"] = 4 if op.get("type") == "door" else 3
+            op["h"] = 2 if op.get("type") == "door" else 3
+        if op.get("type") == "door":
+            op["w"] = 1  # Minecraft doors are 1 block wide
+            op["h"] = 2  # Minecraft doors are 2 blocks tall
     data["building"] = b
     if "style" not in data:
         data["style"] = {}
