@@ -67,8 +67,8 @@ class BlockPlanner:
                 else:
                     self._add_gable_roof(seg_ox, oy, oz, W, H, D, R, overhang, materials.roof)
             else:
-                # No roof: fill the top layer so the structure isn't open
-                self._add_roof_cap(seg_ox, oy, oz, W, H, D, materials.roof)
+                # No roof: fill the top layer with solid blocks (not stairs)
+                self._add_roof_cap(seg_ox, oy, oz, W, H, D, materials.wall)
             self._add_decorations(seg_ox, oy, oz, W, H, D, style.decor)
 
             segment_offset_x += W
@@ -138,7 +138,7 @@ class BlockPlanner:
                 ))
     
     def _add_roof_cap(self, ox: int, oy: int, oz: int, W: int, H: int, D: int, material: str):
-        """Add a single layer on top of the walls to close structures that have no roof."""
+        """Add a single layer of solid blocks on top of the walls to close structures that have no roof."""
         y_top = oy + H + 1
         for x in range(W):
             for z in range(D):
