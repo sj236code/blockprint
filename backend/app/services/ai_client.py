@@ -281,7 +281,7 @@ def _get_blueprint_prompt(style: str) -> str:
     ROOF TYPES — detect and use the correct type from the drawing:
     - "gable": symmetric triangular roof (peak in the center, two equal slopes). Use for classic house peaks, towers with a centered peak.
     - "hip": hipped roof (slopes on more than two sides, or a pyramid-like top). Use when the roof has a flatter ridge or multiple slopes.
-    - "shed": slant / single-pitch roof (one sloping plane; one side is a diagonal/slant, the other side is a vertical line). Use for lean-tos or when only one diagonal is visible. The slant is rendered as stairs; the vertical side as solid blocks.
+    - "shed": slant / single-pitch roof (one sloping plane; one side is a diagonal/slant, the other side is a vertical line). Use for lean-tos or when only one diagonal is visible. IMPORTANT: height_blocks for a shed roof must be at least half of width_blocks (e.g. width 10 → height_blocks at least 5) so the slope reaches the top. Set height_blocks = ceil(width_blocks / 2) as a minimum.
 
     ROOF STEEPNESS: Set height_blocks to match how steep the roof looks. For triangular (gable) roofs the roof must come to a point at the peak — use at least enough height so the triangle has a sharp tip (e.g. height_blocks at least about half of width_blocks). Steeper → higher (5–8); shallower → lower but still enough to form a point.
 

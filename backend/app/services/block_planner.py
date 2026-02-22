@@ -205,7 +205,6 @@ class BlockPlanner:
         r_min = (span + 1) // 2
         r_max = (span - 1) // 2 + 1
         R_effective = min(max(R, r_min), r_max)
-        # Mirrored x within segment: left + right - x
         x_right = ox + W - 1 + overhang
         x_left = ox - overhang
 
@@ -234,7 +233,13 @@ class BlockPlanner:
                     elif on_south:
                         block = f"{material}[facing=south,half=bottom,shape=straight]"
                     else:
-                        block = "spruce_planks"
+                        SOLID_OVERRIDES = {
+                            "spruce_stairs": "spruce_planks", "oak_stairs": "oak_planks",
+                            "stone_brick_stairs": "stone_bricks", "purpur_stairs": "purpur_block",
+                            "smooth_stone_slab": "smooth_stone",
+                        }
+                        fill_block = SOLID_OVERRIDES.get(material, material.replace("_stairs", "_planks"))
+                        block = fill_block
 
                     if mirror:
                         x_out = x_left + x_right - x
@@ -307,7 +312,22 @@ class BlockPlanner:
         Shed roof stepping along X axis. Without mirror: slant on left (west), solid to the right.
         With mirror: slant on right (east), solid to the left.
         """
+        import math
+
+        span = W + 2 * overhang
+        R = max(R, (span + 1) // 2)  # Ensure enough layers to reach a tip  
         slab_material = material.replace("_stairs", "_slab")
+        SOLID_OVERRIDES = {
+            "spruce_stairs":      "spruce_slab[type=double]",  # matches spruce stair color
+            "oak_stairs":         "oak_slab[type=double]",
+            "dark_oak_stairs":    "dark_oak_slab[type=double]",
+            "stone_brick_stairs": "stone_brick_slab[type=double]",
+            "purpur_stairs":      "purpur_slab[type=double]",
+            "smooth_stone_slab":  "smooth_stone",
+        }
+        solid_material = material.replace("_stairs", "_slab[type=double]")  # default fallback
+        solid_material = SOLID_OVERRIDES.get(material, solid_material)
+
         z1 = oz - overhang
         z2 = oz + D - 1 + overhang
         x_lo = ox - overhang
@@ -333,36 +353,27 @@ class BlockPlanner:
                     for z in range(z1, z2 + 1):
                         self.placements.append(BlockPlacement(
                             x=x_full, y=y, z=z,
-                            block_type=wall_material
+                            block_type=solid_material  
                         ))
                 for x in range(x_lo, x_full):
                     for z in range(z1, z2 + 1):
                         self.placements.append(BlockPlacement(
                             x=x, y=y, z=z,
-                            block_type=wall_material
+                            block_type=solid_material  
                         ))
             else:
                 if x_full <= x_hi:
                     for z in range(z1, z2 + 1):
                         self.placements.append(BlockPlacement(
                             x=x_full, y=y, z=z,
-                            block_type=wall_material
+                            block_type=solid_material  
                         ))
                 for x in range(x_full + 1, x_hi + 1):
                     for z in range(z1, z2 + 1):
                         self.placements.append(BlockPlacement(
                             x=x, y=y, z=z,
-                            block_type=wall_material
+                            block_type=solid_material  
                         ))
-
-            self.placements.append(BlockPlacement(
-                x=x_slab, y=y, z=z1 - 1,
-                block_type=f"{material}[facing=north,half=bottom,shape=straight]"
-            ))
-            self.placements.append(BlockPlacement(
-                x=x_slab, y=y, z=z2 + 1,
-                block_type=f"{material}[facing=south,half=bottom,shape=straight]"
-            ))
 
 def get_block_count(blueprint) -> int:
     """Estimate total block count for a blueprint (single or multi-segment)."""
