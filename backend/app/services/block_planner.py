@@ -58,18 +58,20 @@ class BlockPlanner:
                     self._place_door(seg_ox, oy, oz, opening, materials.door)
                 else:
                     self._place_window(seg_ox, oy, oz, opening, materials.window)
-            if building.roof:
+            if building.roof and building.roof.type == "gable":
                 R = building.roof.height_blocks
                 overhang = building.roof.overhang
-                if building.roof.type in ("gable", "hip"):
-                    self._add_gable_roof(seg_ox, oy, oz, W, H, D, R, overhang, materials.roof)
-                elif building.roof.type == "shed":
-                    self._add_shed_roof(seg_ox, oy, oz, W, H, D, R, overhang, materials.roof)
-                else:
-                    self._add_gable_roof(seg_ox, oy, oz, W, H, D, R, overhang, materials.roof)
+                self._add_gable_roof(seg_ox, oy, oz, W, H, D, R, overhang, materials.roof)
+            elif building.roof and building.roof.type == "shed":
+                R = building.roof.height_blocks
+                overhang = building.roof.overhang
+                self._add_shed_roof(seg_ox, oy, oz, W, H, D, R, overhang, materials.roof, materials.wall)
+            elif building.roof and building.roof.type == "hip":
+                R = building.roof.height_blocks
+                overhang = building.roof.overhang
+                self._add_gable_roof(seg_ox, oy, oz, W, H, D, R, overhang, materials.roof)  # hip falls back to gable for now
             else:
-                # No roof: fill the top layer with solid blocks (not stairs)
-                self._add_roof_cap(seg_ox, oy, oz, W, H, D, materials.wall)
+                self._add_roof_cap(seg_ox, oy, oz, W, H, D, materials.roof)
             self._add_decorations(seg_ox, oy, oz, W, H, D, style.decor)
 
             segment_offset_x += W
@@ -227,28 +229,6 @@ class BlockPlanner:
 
                     self.placements.append(BlockPlacement(x=x, y=y, z=z, block_type=block))
     
-    def _add_shed_roof(self, ox: int, oy: int, oz: int, W: int, H: int, D: int, R: int, overhang: int, material: str):
-        """Add a shed (slant) roof: slanted side = stairs, vertical side = solid blocks."""
-        for i in range(R):
-            y = oy + H + 1 + i
-            x1 = ox - overhang + i
-            x2 = ox + W - 1 + overhang
-            z1 = oz - overhang
-            z2 = oz + D - 1 + overhang
-            for z in range(z1, z2 + 1):
-                for x in range(x1, x2 + 1):
-                    on_west = x == x1   # slanted edge (steps up) -> stairs
-                    on_east = x == x2   # vertical side -> solid blocks
-                    on_north = z == z1
-                    on_south = z == z2
-                    if on_west:
-                        block = f"{material}[facing=east,half=bottom,shape=straight]"
-                    elif on_east or on_north or on_south:
-                        block = "spruce_planks"
-                    else:
-                        block = "spruce_planks"
-                    self.placements.append(BlockPlacement(x=x, y=y, z=z, block_type=block))
-    
     def _add_decorations(self, ox: int, oy: int, oz: int, W: int, H: int, D: int, decor: List[str]):
         """Add decorative elements."""
         # Add lanterns near doors
@@ -305,6 +285,53 @@ class BlockPlanner:
             for block in blocks:
                 yield f"/setblock {block.x} {block.y} {block.z} {block_type}"
 
+    def _add_shed_roof(self, ox: int, oy: int, oz: int, W: int, H: int, D: int, R: int, overhang: int, material: str, wall_material: str):
+        """
+        Shed roof stepping along X axis (left to right).
+        Per step:
+        - X offset 0: slab (slanted face, visible from the side)
+        - X offset 1: full block (riser, fills height gap)
+        Steps from left (west) to right (east), each step +1Y and +2X.
+        Front/back faces see the stair profile; left/right side walls are the vertical faces.
+        """
+        slab_material = material.replace("_stairs", "_slab")
+
+        z1 = oz - overhang
+        z2 = oz + D - 1 + overhang
+
+        for i in range(R):
+            y = oy + H + 1 + i
+            x_slab = ox - overhang + (i * 2)   
+            x_full = x_slab + 1      
+
+            for z in range(z1, z2 + 1):
+                self.placements.append(BlockPlacement(
+                    x=x_slab, y=y, z=z,
+                    block_type=f"{slab_material}[type=bottom]"
+                ))
+
+            if x_full <= ox + W - 1 + overhang:
+                for z in range(z1, z2 + 1):
+                    self.placements.append(BlockPlacement(
+                        x=x_full, y=y, z=z,
+                        block_type=wall_material
+                    ))
+
+            for x in range(x_full + 1, ox + W + overhang):
+                for z in range(z1, z2 + 1):
+                    self.placements.append(BlockPlacement(
+                        x=x, y=y, z=z,
+                        block_type=wall_material
+                    ))
+
+            self.placements.append(BlockPlacement(
+                x=x_slab, y=y, z=z1 - 1,
+                block_type=f"{material}[facing=north,half=bottom,shape=straight]"
+            ))
+            self.placements.append(BlockPlacement(
+                x=x_slab, y=y, z=z2 + 1,
+                block_type=f"{material}[facing=south,half=bottom,shape=straight]"
+            ))
 
 def get_block_count(blueprint) -> int:
     """Estimate total block count for a blueprint (single or multi-segment)."""
