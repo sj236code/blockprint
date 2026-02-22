@@ -41,8 +41,9 @@ class BlockPlanner:
             ox, oy, oz, total_width, max_height, max_roof, depth, max_overhang
         )
 
+        # Place segments in reverse order so image-left builds on build-left (AI returns left-to-right as first-to-last)
         segment_offset_x = 0
-        for building in segments:
+        for building in reversed(segments):
             W = building.width_blocks
             H = building.wall_height_blocks
             D = building.depth_blocks
@@ -51,24 +52,26 @@ class BlockPlanner:
             self._add_floor(seg_ox, oy, oz, W, D, materials.foundation)
             self._add_walls(seg_ox, oy, oz, W, H, D, materials.wall)
             for opening in building.openings:
-                self._carve_opening(seg_ox, oy, oz, opening)
+                self._carve_opening(seg_ox, oy, oz, W, opening)
             for opening in building.openings:
                 if opening.type == "door":
-                    self._place_door(seg_ox, oy, oz, opening, materials.door)
+                    self._place_door(seg_ox, oy, oz, W, opening, materials.door)
                 else:
-                    self._place_window(seg_ox, oy, oz, opening, materials.window)
-            if building.roof:
+                    self._place_window(seg_ox, oy, oz, W, opening, materials.window)
+            if building.roof and building.roof.type == "gable":
                 R = building.roof.height_blocks
                 overhang = building.roof.overhang
-                if building.roof.type in ("gable", "hip"):
-                    self._add_gable_roof(seg_ox, oy, oz, W, H, D, R, overhang, materials.roof)
-                elif building.roof.type == "shed":
-                    self._add_shed_roof(seg_ox, oy, oz, W, H, D, R, overhang, materials.roof)
-                else:
-                    self._add_gable_roof(seg_ox, oy, oz, W, H, D, R, overhang, materials.roof)
+                self._add_gable_roof(seg_ox, oy, oz, W, H, D, R, overhang, materials.roof, mirror=True)
+            elif building.roof and building.roof.type == "shed":
+                R = building.roof.height_blocks
+                overhang = building.roof.overhang
+                self._add_shed_roof(seg_ox, oy, oz, W, H, D, R, overhang, materials.roof, materials.wall, mirror=True)
+            elif building.roof and building.roof.type == "hip":
+                R = building.roof.height_blocks
+                overhang = building.roof.overhang
+                self._add_gable_roof(seg_ox, oy, oz, W, H, D, R, overhang, materials.roof, mirror=True)  # hip falls back to gable for now
             else:
-                # No roof: fill the top layer so the structure isn't open
-                self._add_roof_cap(seg_ox, oy, oz, W, H, D, materials.roof)
+                self._add_roof_cap(seg_ox, oy, oz, W, H, D, materials.wall)
             self._add_decorations(seg_ox, oy, oz, W, H, D, style.decor)
 
             segment_offset_x += W
@@ -138,7 +141,7 @@ class BlockPlanner:
                 ))
     
     def _add_roof_cap(self, ox: int, oy: int, oz: int, W: int, H: int, D: int, material: str):
-        """Add a single layer on top of the walls to close structures that have no roof."""
+        """Add a single layer of solid blocks on top of the walls to close structures that have no roof."""
         y_top = oy + H + 1
         for x in range(W):
             for z in range(D):
@@ -149,67 +152,79 @@ class BlockPlanner:
                     block_type=material
                 ))
     
-    def _carve_opening(self, ox: int, oy: int, oz: int, opening):
+    def _mirror_x(self, segment_width: int, opening_x: int, opening_width: int) -> int:
+        """Mirror x within segment so image left/right matches build left/right."""
+        return segment_width - opening_x - opening_width
+
+    def _carve_opening(self, ox: int, oy: int, oz: int, segment_width: int, opening):
         """Carve out an opening (replace with air). Doors are always 1 block wide and 2 blocks tall in the build."""
         w = 1 if opening.type == "door" else opening.w
         h = 2 if opening.type == "door" else opening.h
+        left_x = self._mirror_x(segment_width, opening.x, w)
         for dx in range(w):
             for dy in range(h):
                 self.placements.append(BlockPlacement(
-                    x=ox + opening.x + dx,
+                    x=ox + left_x + dx,
                     y=oy + 1 + opening.y + dy,
                     z=oz,
                     block_type="air"
                 ))
-    
-    def _place_door(self, ox: int, oy: int, oz: int, opening, material: str):
+
+    def _place_door(self, ox: int, oy: int, oz: int, segment_width: int, opening, material: str):
         """Place a door."""
-        # Place door at bottom of opening
+        left_x = self._mirror_x(segment_width, opening.x, 1)
         self.placements.append(BlockPlacement(
-            x=ox + opening.x,
+            x=ox + left_x,
             y=oy + 1,
             z=oz,
             block_type=f"{material}[half=lower]"
         ))
         if opening.h > 1:
             self.placements.append(BlockPlacement(
-                x=ox + opening.x,
+                x=ox + left_x,
                 y=oy + 2,
                 z=oz,
                 block_type=f"{material}[half=upper]"
             ))
-    
-    def _place_window(self, ox: int, oy: int, oz: int, opening, material: str):
+
+    def _place_window(self, ox: int, oy: int, oz: int, segment_width: int, opening, material: str):
         """Place a window."""
+        left_x = self._mirror_x(segment_width, opening.x, opening.w)
         for dx in range(opening.w):
             for dy in range(opening.h):
                 self.placements.append(BlockPlacement(
-                    x=ox + opening.x + dx,
+                    x=ox + left_x + dx,
                     y=oy + 1 + opening.y + dy,
                     z=oz,
                     block_type=material
                 ))
     
-    def _add_gable_roof(self, ox: int, oy: int, oz: int, W: int, H: int, D: int, R: int, overhang: int, material: str):
-        """Add a gable roof with correctly oriented stair blocks."""
-        for i in range(R):
+    def _add_gable_roof(self, ox: int, oy: int, oz: int, W: int, H: int, D: int, R: int, overhang: int, material: str, mirror: bool = False):
+        """Add a gable roof with correctly oriented stair blocks. Ensures enough layers so the roof comes to a tip (stairs at peak)."""
+        span = W + 2 * overhang
+        r_min = (span + 1) // 2
+        r_max = (span - 1) // 2 + 1
+        R_effective = min(max(R, r_min), r_max)
+        x_right = ox + W - 1 + overhang
+        x_left = ox - overhang
+
+        for i in range(R_effective):
             y = oy + H + 1 + i
-            # Each layer steps inward by i blocks on the X axis (gable ridge runs Z axis)
             x1 = ox - overhang + i
             x2 = ox + W - 1 + overhang - i
+            if x1 > x2:
+                break
             z1 = oz - overhang
             z2 = oz + D - 1 + overhang
 
             for z in range(z1, z2 + 1):
                 for x in range(x1, x2 + 1):
-                    # Determine if this block is on the perimeter of this layer
                     on_west  = (x == x1)
                     on_east  = (x == x2)
                     on_north = (z == z1)
                     on_south = (z == z2)
 
                     if on_west:
-                        # Bottom step faces west (away from building center)
                         block = f"{material}[facing=east,half=bottom,shape=straight]"
                     elif on_east:
                         block = f"{material}[facing=west,half=bottom,shape=straight]"
@@ -218,32 +233,23 @@ class BlockPlanner:
                     elif on_south:
                         block = f"{material}[facing=south,half=bottom,shape=straight]"
                     else:
-                        # Interior fill — use a solid block so there are no gaps
-                        block = "spruce_planks"
+                        SOLID_OVERRIDES = {
+                            "spruce_stairs": "spruce_planks", "oak_stairs": "oak_planks",
+                            "stone_brick_stairs": "stone_bricks", "purpur_stairs": "purpur_block",
+                            "smooth_stone_slab": "smooth_stone",
+                        }
+                        fill_block = SOLID_OVERRIDES.get(material, material.replace("_stairs", "_planks"))
+                        block = fill_block
 
-                    self.placements.append(BlockPlacement(x=x, y=y, z=z, block_type=block))
-    
-    def _add_shed_roof(self, ox: int, oy: int, oz: int, W: int, H: int, D: int, R: int, overhang: int, material: str):
-        """Add a shed (slant) roof: slanted side = stairs, vertical side = solid blocks."""
-        for i in range(R):
-            y = oy + H + 1 + i
-            x1 = ox - overhang + i
-            x2 = ox + W - 1 + overhang
-            z1 = oz - overhang
-            z2 = oz + D - 1 + overhang
-            for z in range(z1, z2 + 1):
-                for x in range(x1, x2 + 1):
-                    on_west = x == x1   # slanted edge (steps up) -> stairs
-                    on_east = x == x2   # vertical side -> solid blocks
-                    on_north = z == z1
-                    on_south = z == z2
-                    if on_west:
-                        block = f"{material}[facing=east,half=bottom,shape=straight]"
-                    elif on_east or on_north or on_south:
-                        block = "spruce_planks"
+                    if mirror:
+                        x_out = x_left + x_right - x
+                        if "facing=east" in block:
+                            block = block.replace("facing=east", "facing=west")
+                        elif "facing=west" in block:
+                            block = block.replace("facing=west", "facing=east")
                     else:
-                        block = "spruce_planks"
-                    self.placements.append(BlockPlacement(x=x, y=y, z=z, block_type=block))
+                        x_out = x
+                    self.placements.append(BlockPlacement(x=x_out, y=y, z=z, block_type=block))
     
     def _add_decorations(self, ox: int, oy: int, oz: int, W: int, H: int, D: int, decor: List[str]):
         """Add decorative elements."""
@@ -301,6 +307,73 @@ class BlockPlanner:
             for block in blocks:
                 yield f"/setblock {block.x} {block.y} {block.z} {block_type}"
 
+    def _add_shed_roof(self, ox: int, oy: int, oz: int, W: int, H: int, D: int, R: int, overhang: int, material: str, wall_material: str, mirror: bool = False):
+        """
+        Shed roof stepping along X axis. Without mirror: slant on left (west), solid to the right.
+        With mirror: slant on right (east), solid to the left.
+        """
+        import math
+
+        span = W + 2 * overhang
+        R = max(R, (span + 1) // 2)  # Ensure enough layers to reach a tip  
+        slab_material = material.replace("_stairs", "_slab")
+        SOLID_OVERRIDES = {
+            "spruce_stairs":      "spruce_slab[type=double]",  # matches spruce stair color
+            "oak_stairs":         "oak_slab[type=double]",
+            "dark_oak_stairs":    "dark_oak_slab[type=double]",
+            "stone_brick_stairs": "stone_brick_slab[type=double]",
+            "purpur_stairs":      "purpur_slab[type=double]",
+            "smooth_stone_slab":  "smooth_stone",
+        }
+        solid_material = material.replace("_stairs", "_slab[type=double]")  # default fallback
+        solid_material = SOLID_OVERRIDES.get(material, solid_material)
+
+        z1 = oz - overhang
+        z2 = oz + D - 1 + overhang
+        x_lo = ox - overhang
+        x_hi = ox + W - 1 + overhang
+
+        for i in range(R):
+            y = oy + H + 1 + i
+            if mirror:
+                x_slab = x_hi - (i * 2)
+                x_full = x_slab - 1
+            else:
+                x_slab = x_lo + (i * 2)
+                x_full = x_slab + 1
+
+            for z in range(z1, z2 + 1):
+                self.placements.append(BlockPlacement(
+                    x=x_slab, y=y, z=z,
+                    block_type=f"{slab_material}[type=bottom]"
+                ))
+
+            if mirror:
+                if x_full >= x_lo:
+                    for z in range(z1, z2 + 1):
+                        self.placements.append(BlockPlacement(
+                            x=x_full, y=y, z=z,
+                            block_type=solid_material  
+                        ))
+                for x in range(x_lo, x_full):
+                    for z in range(z1, z2 + 1):
+                        self.placements.append(BlockPlacement(
+                            x=x, y=y, z=z,
+                            block_type=solid_material  
+                        ))
+            else:
+                if x_full <= x_hi:
+                    for z in range(z1, z2 + 1):
+                        self.placements.append(BlockPlacement(
+                            x=x_full, y=y, z=z,
+                            block_type=solid_material  
+                        ))
+                for x in range(x_full + 1, x_hi + 1):
+                    for z in range(z1, z2 + 1):
+                        self.placements.append(BlockPlacement(
+                            x=x, y=y, z=z,
+                            block_type=solid_material  
+                        ))
 
 def get_block_count(blueprint) -> int:
     """Estimate total block count for a blueprint (single or multi-segment)."""

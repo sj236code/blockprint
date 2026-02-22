@@ -272,16 +272,18 @@ def _get_blueprint_prompt(style: str) -> str:
     Analyze the uploaded image of a front-view building outline (pen on white paper). Infer a parametric building or compound. The drawing is always with ground at the bottom and sky at the top; do not invert. Order segments strictly left-to-right as they appear in the image so the build is not mirrored.
 
     SINGLE BUILDING: If the image shows one rectangular structure, return "building" with one object (see schema below).
-    MULTI-SEGMENT: If the image shows multiple connected structures (e.g. left wing + center connector + right wing, or several roofs), return "segments": an array of buildings in left-to-right order. Each segment has its own width_blocks, wall_height_blocks, depth_blocks, roof (optional), and openings. Use the same depth_blocks for all segments. If a structure has no triangular roof (e.g. a flat-topped connector between two roofed sections), omit "roof" for that segment or set "roof": null. Only include "roof" when the drawing shows a clear triangular/pitched roof.
+    MULTI-SEGMENT: If the image shows multiple connected structures (e.g. left wing + center connector + right wing, or several roofs), return "segments": an array of buildings in left-to-right order. You MUST include every visible segment — do not skip any. That includes (a) towers and main buildings with pitched roofs, and (b) flat-topped connecting walls between them. Each segment has its own width_blocks, wall_height_blocks, depth_blocks, roof (optional), and openings. Use the same depth_blocks for all segments.
+
+    FLAT-TOPPED SEGMENTS (critical): Short horizontal walls that connect two roofed parts have no triangle on top — they are flat. For every such connector you see, add one segment with: omit "roof" (or set "roof": null), use a small width_blocks (e.g. 6–8), and wall_height_blocks that match the connector height (often lower than the towers). Do not skip these; the build must include them.
 
     ROOF RULE: Only add a roof when the structure has a pitched/sloped roof. If there is no roof (e.g. flat-topped connector), omit "roof" or set "roof": null.
 
     ROOF TYPES — detect and use the correct type from the drawing:
     - "gable": symmetric triangular roof (peak in the center, two equal slopes). Use for classic house peaks, towers with a centered peak.
     - "hip": hipped roof (slopes on more than two sides, or a pyramid-like top). Use when the roof has a flatter ridge or multiple slopes.
-    - "shed": slant / single-pitch roof (one sloping plane; one side is a diagonal/slant, the other side is a vertical line). Use for lean-tos or when only one diagonal is visible. The slant is rendered as stairs; the vertical side as solid blocks.
+    - "shed": slant / single-pitch roof (one sloping plane; one side is a diagonal/slant, the other side is a vertical line). Use for lean-tos or when only one diagonal is visible. IMPORTANT: height_blocks for a shed roof must be at least half of width_blocks (e.g. width 10 → height_blocks at least 5) so the slope reaches the top. Set height_blocks = ceil(width_blocks / 2) as a minimum.
 
-    ROOF STEEPNESS: Set height_blocks to match how steep the roof looks. Steeper triangle → higher height_blocks (e.g. 5–8). Shallower, wider triangle → lower height_blocks (e.g. 2–4). Narrow tower with tall peak → higher; wide building with low pitch → lower.
+    ROOF STEEPNESS: Set height_blocks to match how steep the roof looks. For triangular (gable) roofs the roof must come to a point at the peak — use at least enough height so the triangle has a sharp tip (e.g. height_blocks at least about half of width_blocks). Steeper → higher (5–8); shallower → lower but still enough to form a point.
 
     Scale conservatively — a typical small house fits in 12×8 blocks. Only go larger if the drawing clearly shows a very wide or tall structure.
 
@@ -331,13 +333,31 @@ JSON Schema:
     "variation": 0.15
   }}
 
-Example multi-segment (left with roof + center with no roof + right with roof):
+Example multi-segment (left with roof + flat connector + right with roof):
 {{
   "view": "front",
   "segments": [
     {{ "width_blocks": 10, "wall_height_blocks": 6, "depth_blocks": 8, "roof": {{ "type": "gable", "height_blocks": 4, "overhang": 1 }}, "openings": [ {{"type":"door","x":6,"y":0,"w":1,"h":2}}, {{"type":"window","x":2,"y":4,"w":2,"h":2}} ] }},
     {{ "width_blocks": 6, "wall_height_blocks": 4, "depth_blocks": 8, "openings": [] }},
     {{ "width_blocks": 8, "wall_height_blocks": 5, "depth_blocks": 8, "roof": {{ "type": "gable", "height_blocks": 5, "overhang": 1 }}, "openings": [ {{"type":"window","x":3,"y":3,"w":2,"h":2}} ] }}
+  ],
+  "style": {{
+    "theme": "{style}",
+    "materials": {{ "foundation": "{palette['foundation']}", "wall": "{palette['wall']}", "trim": "{palette['trim']}", "roof": "{palette['roof']}", "window": "{palette['window']}", "door": "{palette['door']}" }},
+    "decor": ["lantern", "leaves"],
+    "variation": 0.15
+  }}
+}}
+
+Example castle-style (tower + flat connector + center + flat connector + tower) — include every segment, including flat connectors:
+{{
+  "view": "front",
+  "segments": [
+    {{ "width_blocks": 8, "wall_height_blocks": 8, "depth_blocks": 8, "roof": {{ "type": "gable", "height_blocks": 5, "overhang": 1 }}, "openings": [ {{"type":"window","x":3,"y":4,"w":2,"h":2}} ] }},
+    {{ "width_blocks": 6, "wall_height_blocks": 5, "depth_blocks": 8, "openings": [] }},
+    {{ "width_blocks": 14, "wall_height_blocks": 6, "depth_blocks": 8, "roof": {{ "type": "gable", "height_blocks": 5, "overhang": 1 }}, "openings": [ {{"type":"door","x":6,"y":0,"w":1,"h":2}}, {{"type":"window","x":2,"y":4,"w":2,"h":2}}, {{"type":"window","x":10,"y":4,"w":2,"h":2}} ] }},
+    {{ "width_blocks": 6, "wall_height_blocks": 5, "depth_blocks": 8, "openings": [] }},
+    {{ "width_blocks": 8, "wall_height_blocks": 8, "depth_blocks": 8, "roof": {{ "type": "gable", "height_blocks": 5, "overhang": 1 }}, "openings": [ {{"type":"window","x":3,"y":4,"w":2,"h":2}} ] }}
   ],
   "style": {{
     "theme": "{style}",
