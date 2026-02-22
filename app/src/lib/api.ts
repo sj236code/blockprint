@@ -36,6 +36,35 @@ export async function generateBlueprint(
   return response.json();
 }
 
+function getBlueprintFromAudioErrorMessage(status: number, detail: string): string {
+  if (status === 400) return detail || 'Invalid audio. Please record or upload an audio file.';
+  if (status === 503) return detail || 'Voice input is not available.';
+  if (status === 500) return detail || 'We couldn\'t create a blueprint from this recording. Try again.';
+  return detail || 'Something went wrong. Please try again.';
+}
+
+export async function generateBlueprintFromAudio(
+  audioFile: File,
+  style: string = 'ghibli'
+): Promise<BlueprintResponse> {
+  const formData = new FormData();
+  formData.append('audio', audioFile);
+  formData.append('style', style);
+
+  const response = await fetch(`${API_BASE}/blueprint/from-audio`, {
+    method: 'POST',
+    body: formData,
+  });
+
+  if (!response.ok) {
+    const body = await response.json().catch(() => ({ detail: 'Unknown error' }));
+    const detail = typeof body.detail === 'string' ? body.detail : 'Unknown error';
+    throw new Error(getBlueprintFromAudioErrorMessage(response.status, detail));
+  }
+
+  return response.json();
+}
+
 export async function buildInMinecraft(
   request: BuildRequest,
   onProgress?: (status: BuildStatus) => void
