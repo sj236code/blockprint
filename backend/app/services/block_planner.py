@@ -71,7 +71,7 @@ class BlockPlanner:
                 overhang = building.roof.overhang
                 self._add_gable_roof(seg_ox, oy, oz, W, H, D, R, overhang, materials.roof)  # hip falls back to gable for now
             else:
-                self._add_roof_cap(seg_ox, oy, oz, W, H, D, materials.roof)
+                self._add_roof_cap(seg_ox, oy, oz, W, H, D, materials.wall)
             self._add_decorations(seg_ox, oy, oz, W, H, D, style.decor)
 
             segment_offset_x += W
