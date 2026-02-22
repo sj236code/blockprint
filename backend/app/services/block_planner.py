@@ -41,8 +41,9 @@ class BlockPlanner:
             ox, oy, oz, total_width, max_height, max_roof, depth, max_overhang
         )
 
+        # Build segments right-to-left in world so image left appears on build left (AI often returns left-to-right as first-to-last)
         segment_offset_x = 0
-        for building in segments:
+        for building in reversed(segments):
             W = building.width_blocks
             H = building.wall_height_blocks
             D = building.depth_blocks
