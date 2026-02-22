@@ -30,7 +30,11 @@ class Settings(BaseSettings):
     # Upload settings
     max_upload_size: int = 10 * 1024 * 1024  # 10MB
     upload_dir: str = "./uploads"
-    
+
+    # ElevenLabs (speech-to-text for voice blueprint)
+    elevenlabs_api_key: Optional[str] = None
+    elevenlabs_stt_model: str = "scribe_v1"
+
     class Config:
         env_file = ".env"
         env_file_encoding = "utf-8"

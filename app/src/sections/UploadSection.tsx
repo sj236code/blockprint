@@ -3,22 +3,29 @@ import { cn } from '@/lib/utils';
 import { UploadZone } from '@/components/UploadZone';
 import { StylePresets } from '@/components/StylePresets';
 import { MinecraftBlockLoader } from '@/components/MinecraftBlockLoader';
-import { generateBlueprint } from '@/lib/api';
-import { Wand2, AlertCircle } from 'lucide-react';
+import { generateBlueprint, generateBlueprintFromAudio } from '@/lib/api';
+import { Wand2, AlertCircle, Image as ImageIcon, Mic } from 'lucide-react';
 import type { Blueprint, StylePreset } from '@/types';
+
+type InputMode = 'image' | 'voice';
 
 interface UploadSectionProps {
   onBlueprintGenerated: (blueprint: Blueprint) => void;
 }
 
 export function UploadSection({ onBlueprintGenerated }: UploadSectionProps) {
+  const [inputMode, setInputMode] = useState<InputMode>('image');
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [audioFile, setAudioFile] = useState<File | null>(null);
+  const [isRecording, setIsRecording] = useState(false);
   const [selectedStyle, setSelectedStyle] = useState<StylePreset>('ghibli');
   const [isGenerating, setIsGenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isVisible, setIsVisible] = useState(false);
   const sectionRef = useRef<HTMLDivElement>(null);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const chunksRef = useRef<Blob[]>([]);
 
   // Intersection observer for scroll animation
   useEffect(() => {
@@ -57,30 +64,87 @@ export function UploadSection({ onBlueprintGenerated }: UploadSectionProps) {
     setError(null);
   }, [previewUrl]);
 
-  const handleGenerate = async () => {
-    if (!selectedFile) return;
-
-    setIsGenerating(true);
+  const handleClearVoice = useCallback(() => {
+    setAudioFile(null);
     setError(null);
+  }, []);
 
+  const handleAudioFileSelect = useCallback((file: File) => {
+    if (file.type.startsWith('audio/')) {
+      setAudioFile(file);
+      setError(null);
+    }
+  }, []);
+
+  const startRecording = useCallback(async () => {
     try {
-      const response = await generateBlueprint(selectedFile, selectedStyle);
-      
-      if (response.success && response.blueprint) {
-        onBlueprintGenerated(response.blueprint);
-        
-        // Scroll to blueprint section
-        const blueprintSection = document.getElementById('blueprint-section');
-        if (blueprintSection) {
-          blueprintSection.scrollIntoView({ behavior: 'smooth' });
-        }
-      } else {
-        setError('Failed to generate blueprint. Please try again.');
-      }
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus') ? 'audio/webm;codecs=opus' : 'audio/webm';
+      const recorder = new MediaRecorder(stream);
+      mediaRecorderRef.current = recorder;
+      chunksRef.current = [];
+
+      recorder.ondataavailable = (e) => {
+        if (e.data.size > 0) chunksRef.current.push(e.data);
+      };
+      recorder.onstop = () => {
+        stream.getTracks().forEach((t) => t.stop());
+        const blob = new Blob(chunksRef.current, { type: mimeType });
+        setAudioFile(new File([blob], 'recording.webm', { type: blob.type }));
+      };
+
+      recorder.start();
+      setIsRecording(true);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'An unexpected error occurred');
-    } finally {
-      setIsGenerating(false);
+      setError(err instanceof Error ? err.message : 'Could not access microphone.');
+    }
+  }, []);
+
+  const stopRecording = useCallback(() => {
+    const recorder = mediaRecorderRef.current;
+    if (recorder && recorder.state !== 'inactive') {
+      recorder.stop();
+      setIsRecording(false);
+    }
+  }, []);
+
+  const handleGenerate = async () => {
+    if (inputMode === 'image') {
+      if (!selectedFile) return;
+      setIsGenerating(true);
+      setError(null);
+      try {
+        const response = await generateBlueprint(selectedFile, selectedStyle);
+        if (response.success && response.blueprint) {
+          onBlueprintGenerated(response.blueprint);
+          const blueprintSection = document.getElementById('blueprint-section');
+          if (blueprintSection) blueprintSection.scrollIntoView({ behavior: 'smooth' });
+        } else {
+          setError('Failed to generate blueprint. Please try again.');
+        }
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'An unexpected error occurred');
+      } finally {
+        setIsGenerating(false);
+      }
+    } else {
+      if (!audioFile) return;
+      setIsGenerating(true);
+      setError(null);
+      try {
+        const response = await generateBlueprintFromAudio(audioFile, selectedStyle);
+        if (response.success && response.blueprint) {
+          onBlueprintGenerated(response.blueprint);
+          const blueprintSection = document.getElementById('blueprint-section');
+          if (blueprintSection) blueprintSection.scrollIntoView({ behavior: 'smooth' });
+        } else {
+          setError('Failed to generate blueprint. Please try again.');
+        }
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'An unexpected error occurred');
+      } finally {
+        setIsGenerating(false);
+      }
     }
   };
 
@@ -110,8 +174,7 @@ export function UploadSection({ onBlueprintGenerated }: UploadSectionProps) {
             Upload Your Design
           </h2>
           <p className="text-white/60 max-w-lg mx-auto">
-            Draw a building outline on paper and upload it. Our AI will analyze the structure 
-            and create a detailed blueprint.
+            Upload a drawing or describe your build with your voice. Our AI will create a detailed blueprint.
           </p>
         </div>
 
@@ -124,6 +187,36 @@ export function UploadSection({ onBlueprintGenerated }: UploadSectionProps) {
             isVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'
           )}
         >
+          {/* Tabs: Image / Voice */}
+          <div className="flex gap-2 mb-6 border-b-2 border-[#4a5b3a] pb-2">
+            <button
+              type="button"
+              onClick={() => { setInputMode('image'); setError(null); }}
+              className={cn(
+                'flex items-center gap-2 px-4 py-2 font-minecraft text-sm transition-colors',
+                inputMode === 'image'
+                  ? 'bg-[#5a8c4a] text-white border-2 border-[#4a6b3a]'
+                  : 'bg-[#2a3a1a] text-white/80 border-2 border-transparent hover:bg-[#3a4a2a]'
+              )}
+            >
+              <ImageIcon className="w-4 h-4" />
+              Upload image
+            </button>
+            <button
+              type="button"
+              onClick={() => { setInputMode('voice'); setError(null); }}
+              className={cn(
+                'flex items-center gap-2 px-4 py-2 font-minecraft text-sm transition-colors',
+                inputMode === 'voice'
+                  ? 'bg-[#5a8c4a] text-white border-2 border-[#4a6b3a]'
+                  : 'bg-[#2a3a1a] text-white/80 border-2 border-transparent hover:bg-[#3a4a2a]'
+              )}
+            >
+              <Mic className="w-4 h-4" />
+              Describe by voice
+            </button>
+          </div>
+
           {/* Loading overlay when generating */}
           {isGenerating && (
             <div 
@@ -133,19 +226,78 @@ export function UploadSection({ onBlueprintGenerated }: UploadSectionProps) {
             >
               <MinecraftBlockLoader size="lg" />
               <p className="text-white font-medium">Generating blueprint...</p>
-              <p className="text-sm text-white/60">Analyzing your image with AI</p>
+              <p className="text-sm text-white/60">
+                {inputMode === 'voice' ? 'Transcribing and building...' : 'Analyzing your image with AI'}
+              </p>
             </div>
           )}
 
           <div className="grid md:grid-cols-2 gap-8">
-            {/* Left: Upload */}
+            {/* Left: Upload or Voice */}
             <div className="space-y-6">
-              <UploadZone
-                onFileSelect={handleFileSelect}
-                selectedFile={selectedFile}
-                onClear={handleClear}
-                previewUrl={previewUrl}
-              />
+              {inputMode === 'image' ? (
+                <UploadZone
+                  onFileSelect={handleFileSelect}
+                  selectedFile={selectedFile}
+                  onClear={handleClear}
+                  previewUrl={previewUrl}
+                />
+              ) : (
+                <div className="p-6 border-2 border-[#4a5b3a] bg-[#0d1a0a]/80 space-y-4">
+                  <h4 className="text-sm font-medium font-minecraft text-[#7CBD6B]">Record or upload audio</h4>
+                  <div className="flex flex-wrap gap-3">
+                    {!isRecording ? (
+                      <button
+                        type="button"
+                        onClick={startRecording}
+                        disabled={isGenerating}
+                        className="flex items-center gap-2 px-4 py-3 font-minecraft bg-[#7CBD6B] border-2 border-[#5a8c4a] text-white hover:bg-[#8bc46b] disabled:opacity-50"
+                      >
+                        <Mic className="w-4 h-4" />
+                        Start recording
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={stopRecording}
+                        className="flex items-center gap-2 px-4 py-3 font-minecraft bg-red-700 border-2 border-red-600 text-white hover:bg-red-600"
+                      >
+                        <span className="w-2 h-2 rounded-full bg-white animate-pulse" />
+                        Stop recording
+                      </button>
+                    )}
+                    <label className="flex items-center gap-2 px-4 py-3 font-minecraft bg-[#5a6b4a] border-2 border-[#4a5b3a] text-white hover:bg-[#6a7b5a] cursor-pointer">
+                      <ImageIcon className="w-4 h-4" />
+                      Upload audio
+                      <input
+                        type="file"
+                        accept="audio/*"
+                        className="sr-only"
+                        onChange={(e) => {
+                          const f = e.target.files?.[0];
+                          if (f) handleAudioFileSelect(f);
+                          e.target.value = '';
+                        }}
+                      />
+                    </label>
+                  </div>
+                  {audioFile && (
+                    <div className="flex items-center justify-between text-sm text-white/80">
+                      <span>Ready: {audioFile.name}</span>
+                      <button
+                        type="button"
+                        onClick={handleClearVoice}
+                        className="text-[#7CBD6B] hover:underline"
+                      >
+                        Clear
+                      </button>
+                    </div>
+                  )}
+                  <p className="text-xs text-white/50">
+                    Describe your building (e.g. “A small house with a gable roof and two windows”). We’ll transcribe and generate a blueprint.
+                  </p>
+                </div>
+              )}
             </div>
 
             {/* Right: Style Selection */}
@@ -157,24 +309,45 @@ export function UploadSection({ onBlueprintGenerated }: UploadSectionProps) {
 
               {/* Tips */}
               <div className="p-4 border-2 border-[#4a5b3a] bg-[#0d1a0a]/80">
-                <h4 className="text-sm font-medium font-minecraft text-[#7CBD6B] mb-2">Tips for best results</h4>
+                <h4 className="text-sm font-medium font-minecraft text-[#7CBD6B] mb-2">
+                  {inputMode === 'voice' ? 'Voice tips' : 'Tips for best results'}
+                </h4>
                 <ul className="space-y-1.5 text-xs text-white/70">
-                  <li className="flex items-start gap-2">
-                    <span className="text-[#7CBD6B]">•</span>
-                    Use clear, dark lines on white paper
-                  </li>
-                  <li className="flex items-start gap-2">
-                    <span className="text-[#7CBD6B]">•</span>
-                    Draw the front view of a building
-                  </li>
-                  <li className="flex items-start gap-2">
-                    <span className="text-[#7CBD6B]">•</span>
-                    Include doors and windows if desired
-                  </li>
-                  <li className="flex items-start gap-2">
-                    <span className="text-[#7CBD6B]">•</span>
-                    Avoid complex 3D perspectives
-                  </li>
+                  {inputMode === 'voice' ? (
+                    <>
+                      <li className="flex items-start gap-2">
+                        <span className="text-[#7CBD6B]">•</span>
+                        Speak clearly (e.g. “A house with a pointed roof and a door”)
+                      </li>
+                      <li className="flex items-start gap-2">
+                        <span className="text-[#7CBD6B]">•</span>
+                        Mention roof type, doors, and windows if you want them
+                      </li>
+                      <li className="flex items-start gap-2">
+                        <span className="text-[#7CBD6B]">•</span>
+                        For castles or multi-part buildings, say “towers” or “wings”
+                      </li>
+                    </>
+                  ) : (
+                    <>
+                      <li className="flex items-start gap-2">
+                        <span className="text-[#7CBD6B]">•</span>
+                        Use clear, dark lines on white paper
+                      </li>
+                      <li className="flex items-start gap-2">
+                        <span className="text-[#7CBD6B]">•</span>
+                        Draw the front view of a building
+                      </li>
+                      <li className="flex items-start gap-2">
+                        <span className="text-[#7CBD6B]">•</span>
+                        Include doors and windows if desired
+                      </li>
+                      <li className="flex items-start gap-2">
+                        <span className="text-[#7CBD6B]">•</span>
+                        Avoid complex 3D perspectives
+                      </li>
+                    </>
+                  )}
                 </ul>
               </div>
             </div>
@@ -192,7 +365,9 @@ export function UploadSection({ onBlueprintGenerated }: UploadSectionProps) {
                 <AlertCircle className="w-5 h-5 text-red-400 flex-shrink-0 mt-0.5" />
                 <div>
                   <p className="text-sm text-red-400">{error}</p>
-                  <p className="text-xs text-white/50 mt-1">You can try again with the same image or upload a different one.</p>
+                  <p className="text-xs text-white/50 mt-1">
+                    {inputMode === 'voice' ? 'Try recording again or upload a different audio file.' : 'You can try again with the same image or upload a different one.'}
+                  </p>
                 </div>
               </div>
               <button
@@ -209,11 +384,14 @@ export function UploadSection({ onBlueprintGenerated }: UploadSectionProps) {
           <div className="mt-8 flex justify-center">
             <button
               onClick={handleGenerate}
-              disabled={!selectedFile || isGenerating}
+              disabled={
+                isGenerating ||
+                (inputMode === 'image' ? !selectedFile : !audioFile)
+              }
               className={cn(
                 'group relative px-8 py-4 font-medium font-minecraft text-white border-2 border-b-4',
                 'transition-all duration-200 ease-out',
-                !selectedFile || isGenerating
+                isGenerating || (inputMode === 'image' ? !selectedFile : !audioFile)
                   ? 'bg-[#3a4a2a] border-[#2a3a1a] cursor-not-allowed opacity-50'
                   : 'bg-[#7CBD6B] border-[#5a8c4a] hover:bg-[#8bc46b] active:border-b-2 active:translate-y-0.5'
               )}
@@ -222,7 +400,7 @@ export function UploadSection({ onBlueprintGenerated }: UploadSectionProps) {
                 {isGenerating ? (
                   <>
                     <MinecraftBlockLoader size="sm" />
-                    Analyzing Image...
+                    {inputMode === 'voice' ? 'Transcribing & building...' : 'Analyzing Image...'}
                   </>
                 ) : (
                   <>

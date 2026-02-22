@@ -375,6 +375,69 @@ Example castle-style (tower + flat connector + center + flat connector + tower) 
 }}"""
 
 
+def _get_blueprint_from_text_prompt(style: str) -> str:
+    """Prompt for generating blueprint JSON from a verbal description (same schema as image path)."""
+    palette = STYLE_PALETTES.get(style, STYLE_PALETTES["ghibli"])
+    return f"""
+You are a blueprint generator for Minecraft buildings. The user will provide a verbal description of a building they want. Your job is to output a single JSON object that describes that building in the exact schema below.
+
+RULES:
+- Interpret the description as a front-view Minecraft structure. If the user says "house", "castle", "tower", "cottage", etc., map it to one or more segments with appropriate dimensions, roofs, and openings.
+- If the user omits details (e.g. size, number of windows, door position, roof type, or number of segments), fill in sensible defaults so the result is a complete, valid blueprint. For example: no size given → use a moderate default (e.g. 12–14 width_blocks, 6 wall_height_blocks, 8 depth_blocks). No doors/windows → add at least one door and a couple of windows in reasonable positions.
+- SINGLE BUILDING: If the description suggests one main structure, return "building" with one object.
+- MULTI-SEGMENT: If the description suggests multiple parts (e.g. "castle with two towers and a center", "house with a garage"), return "segments": an array in left-to-right order. Use the same depth_blocks for all segments. For flat-topped connectors between roofed parts, omit "roof" for that segment.
+- ROOF: Use "gable" for typical pitched roofs, "hip" for pyramid-like towers, "shed" for a single slant. Omit "roof" only for flat connectors. height_blocks 2..40, overhang 0..4.
+- OPENINGS: Door is always w:1, h:2. Opening x,y are relative to that segment's front face. Include at least one door for the main segment if the user mentions a door or entrance.
+- view must be "front". style.theme must be "{style}".
+- Use ONLY these block names (no others):
+  foundation: {palette['foundation']}, wall: {palette['wall']}, trim: {palette['trim']}, roof: {palette['roof']}, window: {palette['window']}, door: {palette['door']}
+- Return ONLY the JSON object. No markdown, no code fences, no explanation.
+
+JSON Schema (same as image-based blueprint):
+{{
+  "view": "front",
+  "building": {{
+    "width_blocks": 14,
+    "wall_height_blocks": 6,
+    "depth_blocks": 8,
+    "roof": {{ "type": "gable", "height_blocks": 4, "overhang": 1 }},
+    "openings": [ {{"type":"door","x":6,"y":0,"w":1,"h":2}}, {{"type":"window","x":2,"y":2,"w":2,"h":2}} ]
+  }},
+  "style": {{
+    "theme": "{style}",
+    "materials": {{
+      "foundation": "{palette['foundation']}",
+      "wall": "{palette['wall']}",
+      "trim": "{palette['trim']}",
+      "roof": "{palette['roof']}",
+      "window": "{palette['window']}",
+      "door": "{palette['door']}"
+    }},
+    "decor": ["lantern", "leaves"],
+    "variation": 0.15
+  }}
+}}
+
+Example multi-segment (castle-style):
+{{
+  "view": "front",
+  "segments": [
+    {{ "width_blocks": 8, "wall_height_blocks": 8, "depth_blocks": 8, "roof": {{ "type": "gable", "height_blocks": 5, "overhang": 1 }}, "openings": [ {{"type":"window","x":3,"y":4,"w":2,"h":2}} ] }},
+    {{ "width_blocks": 6, "wall_height_blocks": 5, "depth_blocks": 8, "openings": [] }},
+    {{ "width_blocks": 14, "wall_height_blocks": 6, "depth_blocks": 8, "roof": {{ "type": "gable", "height_blocks": 5, "overhang": 1 }}, "openings": [ {{"type":"door","x":6,"y":0,"w":1,"h":2}}, {{"type":"window","x":2,"y":4,"w":2,"h":2}}, {{"type":"window","x":10,"y":4,"w":2,"h":2}} ] }},
+    {{ "width_blocks": 6, "wall_height_blocks": 5, "depth_blocks": 8, "openings": [] }},
+    {{ "width_blocks": 8, "wall_height_blocks": 8, "depth_blocks": 8, "roof": {{ "type": "gable", "height_blocks": 5, "overhang": 1 }}, "openings": [ {{"type":"window","x":3,"y":4,"w":2,"h":2}} ] }}
+  ],
+  "style": {{
+    "theme": "{style}",
+    "materials": {{ "foundation": "{palette['foundation']}", "wall": "{palette['wall']}", "trim": "{palette['trim']}", "roof": "{palette['roof']}", "window": "{palette['window']}", "door": "{palette['door']}" }},
+    "decor": ["lantern", "leaves"],
+    "variation": 0.15
+  }}
+}}
+"""
+
+
 class AIClient:
     def __init__(self):
         self.settings = get_settings()
@@ -528,7 +591,85 @@ class AIClient:
             data = response.json()
             content = data["choices"][0]["message"]["content"]
             return _extract_json_from_content(content)
-    
+
+    def _analyze_text_gemini_sync(self, transcript: str, style: str) -> dict:
+        """Synchronous Gemini API call for text-to-blueprint (no image)."""
+        from google import genai
+        from google.genai import types
+
+        client = genai.Client(api_key=self.api_key)
+        text_prompt = (
+            "You are a blueprint extraction engine. Your response must be exactly one JSON object, "
+            "no other text, no markdown code blocks, no explanation. Use double quotes for all keys and strings.\n\n"
+            + _get_blueprint_from_text_prompt(style)
+            + "\n\n---\nUser's description:\n"
+            + transcript
+        )
+
+        try:
+            response = client.models.generate_content(
+                model=self.model,
+                contents=[text_prompt],
+                config=types.GenerateContentConfig(
+                    temperature=0.2,
+                    max_output_tokens=4096,
+                ),
+            )
+        except Exception as api_error:
+            raise ValueError(f"Gemini API error: {str(api_error)}") from api_error
+
+        if hasattr(response, "prompt_feedback") and response.prompt_feedback:
+            if getattr(response.prompt_feedback, "block_reason", None):
+                raise ValueError(f"Gemini blocked the request: {response.prompt_feedback.block_reason}")
+
+        content = response.text
+        if not content and hasattr(response, "candidates") and response.candidates:
+            parts = getattr(response.candidates[0].content, "parts", [])
+            content = "".join(getattr(p, "text", "") or "" for p in parts)
+        if not content:
+            raise ValueError("Gemini returned empty response")
+
+        return _extract_json_from_content(content)
+
+    async def analyze_text(self, transcript: str, style: str = "ghibli") -> dict:
+        """Generate blueprint JSON from a verbal description (transcript)."""
+        if not self.api_key:
+            return self._get_mock_blueprint(style)
+
+        if self.provider == "gemini":
+            return await asyncio.to_thread(
+                self._analyze_text_gemini_sync,
+                transcript,
+                style,
+            )
+
+        # OpenAI: text-only chat
+        system_prompt = "You are a blueprint extraction engine. Return ONLY valid JSON that matches the schema exactly."
+        user_prompt = _get_blueprint_from_text_prompt(style) + "\n\n---\nUser's description:\n" + transcript
+
+        async with httpx.AsyncClient() as client:
+            response = await client.post(
+                "https://api.openai.com/v1/chat/completions",
+                headers={
+                    "Authorization": f"Bearer {self.api_key}",
+                    "Content-Type": "application/json",
+                },
+                json={
+                    "model": self.model,
+                    "messages": [
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": user_prompt},
+                    ],
+                    "max_tokens": 4096,
+                    "temperature": 0.2,
+                },
+                timeout=60.0,
+            )
+            response.raise_for_status()
+            data = response.json()
+            content = data["choices"][0]["message"]["content"]
+            return _extract_json_from_content(content)
+
     def _get_mock_blueprint(self, style: str) -> dict:
         """Return a mock blueprint for testing."""
         return {
