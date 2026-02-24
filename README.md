@@ -10,6 +10,7 @@ Generate Minecraft building blueprints from an image using AI. Upload a sketch o
 
 ## Quick Start
 
+
 ### 1. Backend
 
 ```bash
